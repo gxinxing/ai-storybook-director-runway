@@ -1,15 +1,15 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Support for FFmpeg.wasm
+  // Support for FFmpeg.wasm — use credentialless to avoid blocking external images
   async headers() {
     return [
       {
-        source: "/:path*",
+        source: "/:path((?!api/).*)",  // Only apply to non-API routes
         headers: [
           {
             key: "Cross-Origin-Embedder-Policy",
-            value: "require-corp",
+            value: "credentialless",
           },
           {
             key: "Cross-Origin-Opener-Policy",
@@ -18,16 +18,6 @@ const nextConfig: NextConfig = {
         ],
       },
     ];
-  },
-  // Turbopack config (Next.js 16 default)
-  turbopack: {},
-  // Webpack fallback for FFmpeg.wasm
-  webpack: (config) => {
-    config.resolve.fallback = {
-      ...config.resolve.fallback,
-      fs: false,
-    };
-    return config;
   },
 };
 

@@ -174,14 +174,19 @@ export default function Home() {
         await ffmpeg.writeFile(`clip${i}.mp4`, new Uint8Array(data));
       }
 
-      setProgress("正在合并视频片段...");
-      const concatList = videoUrls.map((_, i) => `file 'clip${i}.mp4'`).join("\n");
-      await ffmpeg.writeFile("concat.txt", concatList);
-
+      // Use concat filter with re-encoding to handle different codecs
       await ffmpeg.exec([
-        "-f", "concat", "-safe", "0",
-        "-i", "concat.txt",
-        "-c", "copy",
+        "-i", "clip0.mp4",
+        ...videoUrls.slice(1).flatMap((_, i) => ["-i", `clip${i + 1}.mp4`]),
+        "-filter_complex",
+        videoUrls.map((_, i) => `[${i}:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1[v${i}];`).join("") +
+          videoUrls.map((_, i) => `[${i}:a]aresample=44100[a${i}];`).join("") +
+          videoUrls.map((_, i) => `[v${i}][a${i}]`).join("") +
+          `concat=n=${videoUrls.length}:v=1:a=1[v][a]`,
+        "-map", "[v]", "-map", "[a]",
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+        "-c:a", "aac", "-b:a", "128k",
+        "-movflags", "+faststart",
         "-y", "merged.mp4",
       ]);
 
@@ -196,7 +201,6 @@ export default function Home() {
       for (let i = 0; i < videoUrls.length; i++) {
         try { await ffmpeg.deleteFile(`clip${i}.mp4`); } catch {}
       }
-      try { await ffmpeg.deleteFile("concat.txt"); } catch {}
       try { await ffmpeg.deleteFile("merged.mp4"); } catch {}
     } catch (err) {
       console.error("Video merge error:", err);

@@ -2,32 +2,44 @@ import { NextRequest, NextResponse } from "next/server";
 import { generateImage, waitForTask } from "@/lib/runway";
 
 export async function POST(req: NextRequest) {
+  const abortController = new AbortController();
+
+  // Cancel on client disconnect
+  req.signal.addEventListener("abort", () => abortController.abort());
+
   try {
     const { sceneDescription } = await req.json();
 
-    if (!sceneDescription) {
+    if (!sceneDescription || typeof sceneDescription !== "string") {
       return NextResponse.json(
-        { error: "sceneDescription is required" },
+        { error: "场景描述不能为空" },
         { status: 400 }
       );
     }
 
-    // Step 1: Start image generation task
-    const { taskId } = await generateImage(sceneDescription);
-
-    // Step 2: Wait for completion
-    const result = await waitForTask(taskId);
-
-    if (!result.output || result.output.length === 0) {
-      throw new Error("No output returned from image generation");
+    if (sceneDescription.length > 1000) {
+      return NextResponse.json(
+        { error: "场景描述不能超过 1000 字" },
+        { status: 400 }
+      );
     }
 
-    return NextResponse.json({
-      imageUrl: result.output[0],
-    });
+    const { taskId } = await generateImage(sceneDescription);
+    const result = await waitForTask(taskId, 300000, abortController.signal);
+
+    if (!result.output || result.output.length === 0) {
+      throw new Error("No output");
+    }
+
+    return NextResponse.json({ imageUrl: result.output[0] });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Failed to generate image";
-    console.error("Image generation error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    if (error instanceof Error && error.message === "Operation cancelled") {
+      return NextResponse.json({ error: "已取消" }, { status: 499 });
+    }
+    console.error("Image generation error:", error);
+    return NextResponse.json(
+      { error: "图片生成失败，请稍后重试" },
+      { status: 500 }
+    );
   }
 }
