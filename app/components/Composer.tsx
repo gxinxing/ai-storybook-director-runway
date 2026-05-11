@@ -32,6 +32,8 @@ export interface ComposerSettings {
 interface ComposerProps {
   onSubmit: (concept: string, settings: ComposerSettings, files: AttachmentFile[]) => void;
   loading?: boolean;
+  genStep: number;
+  showModal: boolean;
 }
 
 /* ───────── Constants ───────── */
@@ -294,7 +296,7 @@ function GenModal({ step }: { step: number }) {
 
 /* ───────── Main Composer ───────── */
 
-export default function Composer({ onSubmit, loading }: ComposerProps) {
+export default function Composer({ onSubmit, loading, genStep, showModal }: ComposerProps) {
   /* State */
   const [text, setText] = useState("");
   const [files, setFiles] = useState<AttachmentFile[]>([]);
@@ -307,8 +309,6 @@ export default function Composer({ onSubmit, loading }: ComposerProps) {
   });
   const [openPopover, setOpenPopover] = useState<"attach" | "settings" | null>(null);
   const [toast, setToast] = useState("");
-  const [genStep, setGenStep] = useState(-1);
-  const [showModal, setShowModal] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -369,8 +369,6 @@ export default function Composer({ onSubmit, loading }: ComposerProps) {
       if (!canSend) showToast("先输入故事概念，或上传一张参考图");
       return;
     }
-    setShowModal(true);
-    setGenStep(0);
     onSubmit(text.trim(), settings, files);
   };
 
@@ -744,7 +742,7 @@ export default function Composer({ onSubmit, loading }: ComposerProps) {
             查看完整画廊 →
           </button>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {COVER_EXAMPLES.map((c) => (
             <div
               key={c.title}

@@ -41,6 +41,8 @@ export default function Home() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [shareSuccess, setShareSuccess] = useState(false);
+  const [genStep, setGenStep] = useState(-1);
+  const [showModal, setShowModal] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   // Step 1: Generate story (called from Composer)
@@ -52,9 +54,12 @@ export default function Home() {
     if (!concept) return;
     setLoading(true);
     setError("");
+    setShowModal(true);
+    setGenStep(0);
     setProgress("正在生成故事...");
 
     try {
+      setGenStep(1);
       const res = await fetch("/api/generate-story", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -68,10 +73,12 @@ export default function Home() {
       }
 
       setStory(data);
+      setGenStep(2);
       setStep("story");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "未知错误";
       setError(message);
+      setShowModal(false);
     } finally {
       setLoading(false);
       setProgress("");
@@ -83,6 +90,8 @@ export default function Home() {
     if (!story) return;
     setLoading(true);
     setError("");
+    setShowModal(true);
+    setGenStep(2);
     setStep("generating");
     setImages([]);
     setVideos([]);
@@ -129,14 +138,18 @@ export default function Home() {
         setVideos([...videoUrls]);
       }
 
+      setGenStep(3);
       setProgress("所有片段已生成，正在合并视频...");
       setStep("merging");
 
       // Merge videos
       await mergeVideosWithSubtitles(videoUrls, story.pages, story.title);
+      setGenStep(4);
+      setShowModal(false);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "未知错误";
       setError(message);
+      setShowModal(false);
       if (images.length > 0) {
         setStep("result");
       }
@@ -332,7 +345,7 @@ export default function Home() {
             </section>
 
             {/* Composer */}
-            <Composer onSubmit={handleComposerSubmit} loading={loading} />
+            <Composer onSubmit={handleComposerSubmit} loading={loading} genStep={genStep} showModal={showModal} />
           </div>
         )}
 
