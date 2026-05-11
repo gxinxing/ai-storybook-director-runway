@@ -34,7 +34,7 @@ export default function Home() {
   const [genStep, setGenStep] = useState(-1);
   const [showModal, setShowModal] = useState(false);
   const [currentGenIndex, setCurrentGenIndex] = useState(-1);
-  const [selectedMusic, setSelectedMusic] = useState<{ id: string; name: string; url: string } | null>(null);
+  const [selectedMusic, setSelectedMusic] = useState<{ id: string; name: string; description: string; mood: string; url: string } | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const settingsRef = useRef<ComposerSettings | null>(null);
