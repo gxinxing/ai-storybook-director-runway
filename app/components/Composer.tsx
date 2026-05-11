@@ -216,7 +216,8 @@ function SegGroup({
 /* ───────── Cover Card SVG ───────── */
 
 function CoverSVG({ icon, g1, g2, g3, title }: { icon: string; g1: string; g2: string; g3: string; title: string }) {
-  const id = `cg-${icon}-${Math.random().toString(36).slice(2, 6)}`;
+  // Use a deterministic ID based on icon to avoid re-render issues with Math.random()
+  const id = `cg-${icon}-${title}`;
   return (
     <svg viewBox="0 0 120 160" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice" className="w-full h-full block">
       <defs>
@@ -437,7 +438,7 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
     setText(prompt);
     setTimeout(autoResize, 0);
     textareaRef.current?.focus();
-    showToast("已填入故事概念，按 ↑ 发送");
+    showToast("已填入故事概念，按 ⌘+Enter 发送");
   };
 
   /* Global click-outside & Esc */
@@ -540,6 +541,8 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
                   }`}
                   aria-label="添加参考"
                   title="添加参考"
+                  aria-expanded={openPopover === "attach"}
+                  aria-haspopup="true"
                 >
                   <IconAttach />
                 </button>
@@ -548,6 +551,8 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
                 {openPopover === "attach" && (
                   <div
                     data-popover-content
+                    role="menu"
+                    aria-label="附件类型"
                     className="absolute bottom-[calc(100%+10px)] left-0 bg-white border border-[#e5e7eb] rounded-[14px] shadow-[0_16px_48px_rgba(0,0,0,0.14)] p-2 min-w-[260px] z-20"
                     onClick={(e) => e.stopPropagation()}
                   >
@@ -589,6 +594,8 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
                   }`}
                   aria-label="设置"
                   title="设置"
+                  aria-expanded={openPopover === "settings"}
+                  aria-haspopup="true"
                 >
                   <IconSettings />
                 </button>
@@ -597,6 +604,8 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
                 {openPopover === "settings" && (
                   <div
                     data-popover-content
+                    role="dialog"
+                    aria-label="生成设置"
                     className="absolute bottom-[calc(100%+10px)] left-0 bg-white border border-[#e5e7eb] rounded-[14px] shadow-[0_16px_48px_rgba(0,0,0,0.14)] p-4 min-w-[340px] z-20"
                     onClick={(e) => e.stopPropagation()}
                   >
@@ -619,23 +628,26 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
                       </div>
                       <div className="grid grid-cols-4 gap-2">
                         {STYLE_CARDS.map((sc) => (
-                          <div
+                          <button
                             key={sc.key}
+                            type="button"
                             onClick={() =>
                               setSettings((s) => ({ ...s, style: sc.key, styleLabel: sc.label }))
                             }
-                            className={`aspect-square rounded-[9px] border-2 cursor-pointer relative overflow-hidden transition-all hover:scale-[1.04] ${
+                            className={`aspect-square rounded-[9px] border-2 cursor-pointer relative overflow-hidden transition-all hover:scale-[1.04] p-0 ${
                               settings.style === sc.key ? "border-[#a855f7]" : "border-transparent"
                             }`}
                             style={{
                               background: sc.bg,
                               backgroundSize: sc.bgSize || undefined,
                             }}
+                            aria-label={`选择${sc.label}画风`}
+                            aria-pressed={settings.style === sc.key}
                           >
                             <div className="absolute bottom-1 left-1 right-1 text-[10.5px] text-white bg-[rgba(0,0,0,0.45)] px-1 py-0.5 rounded-[5px] text-center backdrop-blur-[4px] font-medium">
                               {sc.label}
                             </div>
-                          </div>
+                          </button>
                         ))}
                       </div>
                     </div>

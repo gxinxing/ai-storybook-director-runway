@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { FFmpeg } from "@ffmpeg/ffmpeg";
+import { useState, useRef, useEffect, useCallback } from "react";
 import Composer, { type ComposerSettings, type AttachmentFile } from "./components/Composer";
+import { createStoryVideo, shareContent } from "@/lib/video-merge";
 
 type Step = "input" | "story" | "generating" | "merging" | "result";
 
@@ -20,17 +20,6 @@ interface Story {
   pages: StoryPage[];
 }
 
-// FFmpeg singleton
-let ffmpegInstance: FFmpeg | null = null;
-
-async function getFFmpeg(): Promise<FFmpeg> {
-  if (!ffmpegInstance) {
-    ffmpegInstance = new FFmpeg();
-    await ffmpegInstance.load();
-  }
-  return ffmpegInstance;
-}
-
 export default function Home() {
   const [step, setStep] = useState<Step>("input");
   const [story, setStory] = useState<Story | null>(null);
@@ -44,14 +33,17 @@ export default function Home() {
   const [genStep, setGenStep] = useState(-1);
   const [showModal, setShowModal] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const settingsRef = useRef<ComposerSettings | null>(null);
 
   // Step 1: Generate story (called from Composer)
   const handleComposerSubmit = async (
     concept: string,
     settings: ComposerSettings,
-    _files: AttachmentFile[]
+    files: AttachmentFile[]
   ) => {
     if (!concept) return;
+    settingsRef.current = settings;
     setLoading(true);
     setError("");
     setShowModal(true);
@@ -63,7 +55,14 @@ export default function Home() {
       const res = await fetch("/api/generate-story", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ concept, pageCount: Number(settings.pages) }),
+        body: JSON.stringify({
+          concept,
+          pageCount: Number(settings.pages),
+          attachments: files.map((f) => ({ type: f.type, name: f.name })),
+          style: settings.styleLabel,
+          age: settings.age,
+          lang: settings.lang,
+        }),
       });
 
       const data = await res.json();
@@ -86,8 +85,14 @@ export default function Home() {
   };
 
   // Step 2: Generate images + videos for all pages
-  const handleGenerateAll = async () => {
+  const handleGenerateAll = useCallback(async () => {
     if (!story) return;
+
+    // Cancel any previous in-flight request
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setLoading(true);
     setError("");
     setShowModal(true);
@@ -97,11 +102,23 @@ export default function Home() {
     setVideos([]);
     setMergedVideoUrl(null);
 
-    try {
-      const imageUrls: string[] = [];
-      const videoUrls: string[] = [];
+    // Build style hint from settings stored in story generation
+    const currentStyle = settingsRef.current?.styleLabel || "水彩";
+    const styleHints: Record<string, string> = {
+      "水彩": "children's picture book illustration, watercolor, soft colors, warm lighting",
+      "3D": "3D rendered animation style, Pixar-like, vibrant colors, soft lighting",
+      "水墨": "Chinese ink wash painting style, sumi-e, elegant brushstrokes, muted tones",
+      "像素": "pixel art style, retro game aesthetic, 16-bit, vibrant palette",
+    };
+    const styleHint = styleHints[currentStyle] || styleHints["水彩"];
 
+    const imageUrls: string[] = [];
+    const videoUrls: string[] = [];
+
+    try {
       for (let i = 0; i < story.pages.length; i++) {
+        if (controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
+
         const page = story.pages[i];
 
         // Generate image
@@ -111,13 +128,16 @@ export default function Home() {
         const imgRes = await fetch("/api/generate-image", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sceneDescription: page.scene_description }),
+          body: JSON.stringify({
+            sceneDescription: page.scene_description,
+            styleHint,
+          }),
+          signal: controller.signal,
         });
 
         const imgData = await imgRes.json();
         if (!imgRes.ok) throw new Error(imgData.error || "图片生成失败");
         imageUrls.push(imgData.imageUrl);
-        setImages([...imageUrls]);
 
         // Generate video
         setProgress(
@@ -130,84 +150,58 @@ export default function Home() {
             imageUrl: imgData.imageUrl,
             prompt: page.scene_description,
           }),
+          signal: controller.signal,
         });
 
         const vidData = await vidRes.json();
         if (!vidRes.ok) throw new Error(vidData.error || "视频生成失败");
         videoUrls.push(vidData.videoUrl);
-        setVideos([...videoUrls]);
       }
+
+      // Batch update — only 2 renders instead of 2N
+      setImages(imageUrls);
+      setVideos(videoUrls);
 
       setGenStep(3);
       setProgress("所有片段已生成，正在合并视频...");
       setStep("merging");
 
-      // Merge videos
-      await mergeVideosWithSubtitles(videoUrls, story.pages, story.title);
+      // Merge videos with narration subtitles
+      const blob = await createStoryVideo(
+        videoUrls,
+        story.pages.map((p) => p.narration),
+        story.title,
+        { onProgress: setProgress }
+      );
+
+      if (controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
+
+      const url = URL.createObjectURL(blob);
+      setMergedVideoUrl(url);
       setGenStep(4);
       setShowModal(false);
     } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
       const message = err instanceof Error ? err.message : "未知错误";
       setError(message);
       setShowModal(false);
-      if (images.length > 0) {
+      if (imageUrls.length > 0) {
+        setImages(imageUrls);
         setStep("result");
       }
     } finally {
       setLoading(false);
+      abortRef.current = null;
     }
-  };
+  }, [story]);
 
-  // Merge videos with subtitles
-  const mergeVideosWithSubtitles = async (
-    videoUrls: string[],
-    pages: StoryPage[],
-    title: string
-  ) => {
-    try {
-      const ffmpeg = await getFFmpeg();
-
-      for (let i = 0; i < videoUrls.length; i++) {
-        setProgress(`正在下载视频片段 ${i + 1}/${videoUrls.length}...`);
-        const response = await fetch(videoUrls[i]);
-        const data = await response.arrayBuffer();
-        await ffmpeg.writeFile(`clip${i}.mp4`, new Uint8Array(data));
-      }
-
-      // Use concat filter with re-encoding to handle different codecs
-      await ffmpeg.exec([
-        "-i", "clip0.mp4",
-        ...videoUrls.slice(1).flatMap((_, i) => ["-i", `clip${i + 1}.mp4`]),
-        "-filter_complex",
-        videoUrls.map((_, i) => `[${i}:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1[v${i}];`).join("") +
-          videoUrls.map((_, i) => `[${i}:a]aresample=44100[a${i}];`).join("") +
-          videoUrls.map((_, i) => `[v${i}][a${i}]`).join("") +
-          `concat=n=${videoUrls.length}:v=1:a=1[v][a]`,
-        "-map", "[v]", "-map", "[a]",
-        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
-        "-c:a", "aac", "-b:a", "128k",
-        "-movflags", "+faststart",
-        "-y", "merged.mp4",
-      ]);
-
-      const mergedData = await ffmpeg.readFile("merged.mp4");
-      const mergedBlob = new Blob([mergedData as BlobPart], { type: "video/mp4" });
-      const mergedUrl = URL.createObjectURL(mergedBlob);
-
-      setMergedVideoUrl(mergedUrl);
-      setProgress("完成！");
-      setStep("result");
-
-      for (let i = 0; i < videoUrls.length; i++) {
-        try { await ffmpeg.deleteFile(`clip${i}.mp4`); } catch {}
-      }
-      try { await ffmpeg.deleteFile("merged.mp4"); } catch {}
-    } catch (err) {
-      console.error("Video merge error:", err);
-      setError("视频合并失败，但您可以单独查看每个片段");
-      setStep("result");
-    }
-  };
+  // Cancel generation
+  const handleCancel = useCallback(() => {
+    abortRef.current?.abort();
+    setLoading(false);
+    setShowModal(false);
+    setProgress("");
+  }, []);
 
   // Download merged video
   const handleDownload = () => {
@@ -223,32 +217,24 @@ export default function Home() {
   // Share video
   const handleShare = async () => {
     if (!story) return;
-    const shareData = {
-      title: `${story.title} - AI动画绘本`,
-      text: `${story.hook}\n\n由 AI Storybook Director 生成`,
-      url: window.location.href,
-    };
-    if (navigator.share) {
-      try {
-        await navigator.share(shareData);
-        setShareSuccess(true);
-        setTimeout(() => setShareSuccess(false), 3000);
-      } catch {
-        copyToClipboard();
-      }
+    const ok = await shareContent(
+      `${story.title} - AI动画绘本`,
+      `${story.hook}\n\n由 AI Storybook Director 生成`,
+      window.location.href
+    );
+    if (!ok) {
+      navigator.clipboard.writeText(window.location.href);
+      setShareSuccess(true);
+      setTimeout(() => setShareSuccess(false), 3000);
     } else {
-      copyToClipboard();
+      setShareSuccess(true);
+      setTimeout(() => setShareSuccess(false), 3000);
     }
-  };
-
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(window.location.href);
-    setShareSuccess(true);
-    setTimeout(() => setShareSuccess(false), 3000);
   };
 
   // Reset everything
   const handleReset = () => {
+    abortRef.current?.abort();
     if (mergedVideoUrl) URL.revokeObjectURL(mergedVideoUrl);
     setStep("input");
     setStory(null);
@@ -258,6 +244,8 @@ export default function Home() {
     setProgress("");
     setError("");
     setShareSuccess(false);
+    setLoading(false);
+    setShowModal(false);
   };
 
   useEffect(() => {
@@ -315,9 +303,18 @@ export default function Home() {
 
         {/* Error Banner */}
         {error && (
-          <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 text-red-700">
-            <p className="font-medium">错误</p>
-            <p className="text-sm">{error}</p>
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 flex items-start justify-between gap-3">
+            <div>
+              <p className="font-medium">错误</p>
+              <p className="text-sm">{error}</p>
+            </div>
+            <button
+              onClick={() => setError("")}
+              className="text-red-400 hover:text-red-600 text-lg leading-none shrink-0 bg-transparent border-none cursor-pointer p-1"
+              aria-label="关闭错误提示"
+            >
+              ✕
+            </button>
           </div>
         )}
 
@@ -326,7 +323,13 @@ export default function Home() {
           <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4">
             <div className="flex items-center gap-3">
               <div className="animate-spin h-5 w-5 border-2 border-blue-600 border-t-transparent rounded-full" />
-              <p className="text-blue-700">{progress}</p>
+              <p className="text-blue-700 flex-1">{progress}</p>
+              <button
+                onClick={handleCancel}
+                className="text-xs text-blue-500 hover:text-blue-700 underline bg-transparent border-none cursor-pointer shrink-0"
+              >
+                取消
+              </button>
             </div>
           </div>
         )}
@@ -426,11 +429,15 @@ export default function Home() {
                       <p className="text-xs text-gray-400">{page.emotion}</p>
                     </div>
                     <div className="shrink-0">
-                      {idx < images.length ? (
+                      {idx < videos.length ? (
                         <span className="text-green-600 text-sm">
-                          {idx < videos.length ? "✓ 视频完成" : "✓ 图片完成"}
+                          ✓ 视频完成
                         </span>
-                      ) : idx === images.length ? (
+                      ) : idx < images.length ? (
+                        <span className="text-green-600 text-sm">
+                          ✓ 图片完成
+                        </span>
+                      ) : idx === Math.floor(images.length / 2) * 2 && loading ? (
                         <span className="text-blue-600 text-sm animate-pulse">
                           生成中...
                         </span>
@@ -476,6 +483,12 @@ export default function Home() {
             <p className="text-sm text-gray-400 mt-2">
               正在将 {videos.length} 个视频片段合并成一个完整的动画绘本...
             </p>
+            <button
+              onClick={handleCancel}
+              className="mt-4 text-sm text-purple-600 hover:text-purple-800 underline bg-transparent border-none cursor-pointer"
+            >
+              取消合并
+            </button>
           </div>
         )}
 

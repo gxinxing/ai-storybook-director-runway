@@ -14,10 +14,33 @@ export interface Story {
 
 type LLMProvider = "deepseek" | "openai" | "claude";
 
-function buildStoryPrompt(concept: string, pageCount: number): string {
+function buildStoryPrompt(
+  concept: string,
+  pageCount: number,
+  attachments?: Array<{ type: string; name: string }>,
+  settings?: { style?: string; age?: string; lang?: string }
+): string {
+  let attachmentContext = "";
+  if (attachments && attachments.length > 0) {
+    const parts = attachments.map((a) => {
+      const labels: Record<string, string> = {
+        character: "角色参考",
+        style: "画风参考",
+        scene: "场景参考",
+        text: "故事文本",
+      };
+      return `- ${labels[a.type] || a.type}: ${a.name}`;
+    });
+    attachmentContext = `\n\nThe user has provided the following reference materials:\n${parts.join("\n")}\nTake these references into account when designing characters, art style, scenes, and plot.`;
+  }
+
+  const styleHint = settings?.style ? ` Art style: ${settings.style} illustration.` : "";
+  const ageHint = settings?.age ? ` Target age: ${settings.age} years old.` : "";
+  const langHint = settings?.lang ? ` Write narration in ${settings.lang}.` : "";
+
   return `You are a world-class children's storybook writer and visual director.
 
-Given the concept: "${concept}"
+Given the concept: "${concept}"${attachmentContext}${ageHint}${langHint}
 
 Create a ${pageCount}-page children's picture book story with these elements:
 - Hook: An attention-grabbing opening
@@ -28,7 +51,7 @@ Create a ${pageCount}-page children's picture book story with these elements:
 For EACH page, provide:
 1. narration: The story text for this page (1-2 sentences, child-friendly)
 2. scene_description: A detailed visual description for AI image generation
-   - MUST include art style: children's picture book illustration, watercolor style, soft colors, warm lighting
+   - MUST include art style: children's picture book illustration,${styleHint} soft colors, warm lighting
    - Describe characters, setting, action, mood
    - Keep consistent character descriptions across pages
 3. emotion: The emotional tone (e.g., wonder, joy, surprise, courage)
@@ -129,10 +152,12 @@ async function callClaude(prompt: string): Promise<Story> {
 
 export async function generateStory(
   concept: string,
-  pageCount: number = 5
+  pageCount: number = 5,
+  attachments?: Array<{ type: string; name: string }>,
+  settings?: { style?: string; age?: string; lang?: string }
 ): Promise<Story> {
   const provider = (process.env.LLM_PROVIDER || "deepseek") as LLMProvider;
-  const prompt = buildStoryPrompt(concept, pageCount);
+  const prompt = buildStoryPrompt(concept, pageCount, attachments, settings);
 
   switch (provider) {
     case "openai":

@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
   req.signal.addEventListener("abort", () => abortController.abort());
 
   try {
-    const { sceneDescription } = await req.json();
+    const { sceneDescription, styleHint } = await req.json();
 
     if (!sceneDescription || typeof sceneDescription !== "string") {
       return NextResponse.json(
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { taskId } = await generateImage(sceneDescription);
+    const { taskId } = await generateImage(sceneDescription, styleHint);
     const result = await waitForTask(taskId, 300000, abortController.signal);
 
     if (!result.output || result.output.length === 0) {

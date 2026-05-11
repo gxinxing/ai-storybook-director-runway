@@ -3,7 +3,7 @@ import { generateStory } from "@/lib/llm";
 
 export async function POST(req: NextRequest) {
   try {
-    const { concept, pageCount = 5 } = await req.json();
+    const { concept, pageCount = 5, attachments, style, age, lang } = await req.json();
 
     if (!concept || typeof concept !== "string" || concept.trim().length === 0) {
       return NextResponse.json(
@@ -21,7 +21,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const story = await generateStory(concept.trim(), pages);
+    // Validate attachments if provided
+    let validAttachments: Array<{ type: string; name: string }> | undefined;
+    if (Array.isArray(attachments) && attachments.length > 0) {
+      validAttachments = attachments
+        .filter((a: { type?: string; name?: string }) =>
+          a.type && a.name && ["character", "style", "scene", "text"].includes(a.type)
+        )
+        .map((a: { type: string; name: string }) => ({
+          type: a.type,
+          name: String(a.name).slice(0, 100),
+        }));
+    }
+
+    const story = await generateStory(concept.trim(), pages, validAttachments, { style, age, lang });
     return NextResponse.json(story);
   } catch (error: unknown) {
     console.error("Story generation error:", error);

@@ -1,130 +1,149 @@
 import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { fetchFile } from "@ffmpeg/util";
 
-// Load FFmpeg instance
-let ffmpeg: FFmpeg | null = null;
+// ── FFmpeg singleton ──
+let ffmpegInstance: FFmpeg | null = null;
 
-async function getFFmpeg(): Promise<FFmpeg> {
-  if (!ffmpeg) {
-    ffmpeg = new FFmpeg();
-    await ffmpeg.load();
+export async function getFFmpeg(): Promise<FFmpeg> {
+  if (!ffmpegInstance) {
+    ffmpegInstance = new FFmpeg();
+    await ffmpegInstance.load();
   }
-  return ffmpeg;
+  return ffmpegInstance;
 }
 
 /**
- * Merge multiple video clips into one video
- * @param videoUrls Array of video URLs
- * @param options Optional configuration
- * @returns Merged video as Blob
+ * Merge multiple video clips into one video with re-encoding.
+ * Uses concat filter to handle different codecs across clips.
  */
 export async function mergeVideos(
   videoUrls: string[],
   options?: {
-    addTransitions?: boolean;
+    onProgress?: (msg: string) => void;
+    width?: number;
+    height?: number;
   }
 ): Promise<Blob> {
+  const { onProgress, width = 1280, height = 720 } = options ?? {};
   const ffmpeg = await getFFmpeg();
 
-  // Download all video clips
-  const videoFiles: string[] = [];
+  // Download all clips
   for (let i = 0; i < videoUrls.length; i++) {
-    const response = await fetch(videoUrls[i]);
-    const data = await response.arrayBuffer();
-    const filename = `clip${i}.mp4`;
-    await ffmpeg.writeFile(filename, new Uint8Array(data));
-    videoFiles.push(filename);
-  }
-
-  // Create concat list file
-  const concatList = videoFiles.map((f) => `file '${f}'`).join("\n");
-  await ffmpeg.writeFile("concat.txt", concatList);
-
-  // Merge videos using concat demuxer
-  await ffmpeg.exec([
-    "-f",
-    "concat",
-    "-safe",
-    "0",
-    "-i",
-    "concat.txt",
-    "-c",
-    "copy",
-    "-y",
-    "output.mp4",
-  ]);
-
-  // Read the merged video
-  const data = await ffmpeg.readFile("output.mp4");
-  return new Blob([data as BlobPart], { type: "video/mp4" });
-}
-
-/**
- * Create a story video with narration text overlay
- * @param videoUrls Array of video clip URLs
- * @param narrations Array of narration texts for each clip
- * @param title Story title
- * @returns Final video as Blob
- */
-export async function createStoryVideo(
-  videoUrls: string[],
-  narrations: string[],
-  title: string
-): Promise<Blob> {
-  const ffmpeg = await getFFmpeg();
-
-  // Download all video clips
-  for (let i = 0; i < videoUrls.length; i++) {
+    onProgress?.(`正在下载视频片段 ${i + 1}/${videoUrls.length}...`);
     const response = await fetch(videoUrls[i]);
     const data = await response.arrayBuffer();
     await ffmpeg.writeFile(`clip${i}.mp4`, new Uint8Array(data));
   }
 
-  // Create a complex filter for concatenation with text overlay
-  // First, we need to process each clip with its narration
-  const filterComplexParts: string[] = [];
-  const inputs: string[] = [];
+  onProgress?.("正在合并视频片段...");
 
+  // Build filter_complex: normalize each clip → concat
+  const videoParts = videoUrls
+    .map(
+      (_, i) =>
+        `[${i}:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1[v${i}];`
+    )
+    .join("");
+
+  const audioParts = videoUrls
+    .map((_, i) => `[${i}:a]aresample=44100[a${i}];`)
+    .join("");
+
+  const concatPart =
+    videoUrls.map((_, i) => `[v${i}][a${i}]`).join("") +
+    `concat=n=${videoUrls.length}:v=1:a=1[v][a]`;
+
+  await ffmpeg.exec([
+    "-i", "clip0.mp4",
+    ...videoUrls.slice(1).flatMap((_, i) => ["-i", `clip${i + 1}.mp4`]),
+    "-filter_complex",
+    videoParts + audioParts + concatPart,
+    "-map", "[v]", "-map", "[a]",
+    "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+    "-c:a", "aac", "-b:a", "128k",
+    "-movflags", "+faststart",
+    "-y", "merged.mp4",
+  ]);
+
+  const mergedData = await ffmpeg.readFile("merged.mp4");
+  const blob = new Blob([mergedData as BlobPart], { type: "video/mp4" });
+
+  // Cleanup
   for (let i = 0; i < videoUrls.length; i++) {
-    inputs.push(`-i`, `clip${i}.mp4`);
-    // Add text overlay for narration
-    const safeText = narrations[i]?.replace(/'/g, "'\\''") || "";
-    filterComplexParts.push(
-      `[${i}:v]drawtext=text='${safeText}':fontcolor=white:fontsize=24:box=1:boxcolor=black@0.5:boxborderw=10:x=(w-text_w)/2:y=h-text_h-40[v${i}]`
+    try { await ffmpeg.deleteFile(`clip${i}.mp4`); } catch {}
+  }
+  try { await ffmpeg.deleteFile("merged.mp4"); } catch {}
+
+  return blob;
+}
+
+/**
+ * Create a story video with narration text overlay (drawtext filter).
+ */
+export async function createStoryVideo(
+  videoUrls: string[],
+  narrations: string[],
+  title: string,
+  options?: {
+    onProgress?: (msg: string) => void;
+    width?: number;
+    height?: number;
+  }
+): Promise<Blob> {
+  const { onProgress, width = 1280, height = 720 } = options ?? {};
+  const ffmpeg = await getFFmpeg();
+
+  // Download all clips
+  for (let i = 0; i < videoUrls.length; i++) {
+    onProgress?.(`正在下载视频片段 ${i + 1}/${videoUrls.length}...`);
+    const response = await fetch(videoUrls[i]);
+    const data = await response.arrayBuffer();
+    await ffmpeg.writeFile(`clip${i}.mp4`, new Uint8Array(data));
+  }
+
+  onProgress?.("正在添加字幕并合并...");
+
+  // Build filter_complex: normalize + drawtext + concat
+  const filterParts: string[] = [];
+  for (let i = 0; i < videoUrls.length; i++) {
+    const safeText = (narrations[i] ?? "")
+      .replace(/\\/g, "\\\\")
+      .replace(/'/g, "'\\''")
+      .replace(/:/g, "\\:")
+      .replace(/%/g, "\\%");
+    filterParts.push(
+      `[${i}:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1,drawtext=text='${safeText}':fontcolor=white:fontsize=22:box=1:boxcolor=black@0.5:boxborderw=8:x=(w-text_w)/2:y=h-text_h-50[v${i}];[${i}:a]aresample=44100[a${i}]`
     );
   }
 
-  // Concatenate all processed videos
-  const concatInputs = videoUrls.map((_, i) => `[v${i}][${i}:a]`).join("");
-  filterComplexParts.push(
-    `${concatInputs}concat=n=${videoUrls.length}:v=1:a=1[outv][outa]`
-  );
+  const concatPart =
+    videoUrls.map((_, i) => `[v${i}][a${i}]`).join("") +
+    `concat=n=${videoUrls.length}:v=1:a=1[v][a]`;
 
-  // Execute FFmpeg command
   await ffmpeg.exec([
-    ...inputs,
+    ...videoUrls.flatMap((_, i) => ["-i", `clip${i}.mp4`]),
     "-filter_complex",
-    filterComplexParts.join(";"),
-    "-map",
-    "[outv]",
-    "-map",
-    "[outa]",
-    "-c:v",
-    "libx264",
-    "-c:a",
-    "aac",
-    "-y",
-    "story.mp4",
+    filterParts.join(";") + ";" + concatPart,
+    "-map", "[v]", "-map", "[a]",
+    "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+    "-c:a", "aac", "-b:a", "128k",
+    "-movflags", "+faststart",
+    "-y", "story.mp4",
   ]);
 
   const data = await ffmpeg.readFile("story.mp4");
-  return new Blob([data as BlobPart], { type: "video/mp4" });
+  const blob = new Blob([data as BlobPart], { type: "video/mp4" });
+
+  // Cleanup
+  for (let i = 0; i < videoUrls.length; i++) {
+    try { await ffmpeg.deleteFile(`clip${i}.mp4`); } catch {}
+  }
+  try { await ffmpeg.deleteFile("story.mp4"); } catch {}
+
+  return blob;
 }
 
 /**
  * Download a blob as a file
- * @param blob Blob to download
- * @param filename Filename for the download
  */
 export function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -139,9 +158,6 @@ export function downloadBlob(blob: Blob, filename: string) {
 
 /**
  * Share content using Web Share API if available
- * @param title Share title
- * @param text Share text
- * @param url URL to share
  */
 export async function shareContent(
   title: string,
@@ -150,11 +166,7 @@ export async function shareContent(
 ): Promise<boolean> {
   if (navigator.share) {
     try {
-      await navigator.share({
-        title,
-        text,
-        url,
-      });
+      await navigator.share({ title, text, url });
       return true;
     } catch {
       return false;
