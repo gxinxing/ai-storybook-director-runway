@@ -32,7 +32,7 @@ export async function generateImage(
     body: JSON.stringify({
       promptText: prompt,
       model: "gen4_image",
-      ratio: "1280:768",
+      ratio: "1280:720",
     }),
   });
 
