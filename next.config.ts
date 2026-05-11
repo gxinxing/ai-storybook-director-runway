@@ -19,7 +19,9 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  // Webpack config for FFmpeg.wasm
+  // Turbopack config (Next.js 16 default)
+  turbopack: {},
+  // Webpack fallback for FFmpeg.wasm
   webpack: (config) => {
     config.resolve.fallback = {
       ...config.resolve.fallback,

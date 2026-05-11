@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { fetchFile } from "@ffmpeg/util";
+import Composer, { type ComposerSettings, type AttachmentFile } from "./components/Composer";
 
 type Step = "input" | "story" | "generating" | "merging" | "result";
 
@@ -33,8 +33,6 @@ async function getFFmpeg(): Promise<FFmpeg> {
 
 export default function Home() {
   const [step, setStep] = useState<Step>("input");
-  const [concept, setConcept] = useState("");
-  const [pageCount, setPageCount] = useState(5);
   const [story, setStory] = useState<Story | null>(null);
   const [images, setImages] = useState<string[]>([]);
   const [videos, setVideos] = useState<string[]>([]);
@@ -42,13 +40,16 @@ export default function Home() {
   const [progress, setProgress] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [currentPage, setCurrentPage] = useState(0);
   const [shareSuccess, setShareSuccess] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // Step 1: Generate story
-  const handleGenerateStory = async () => {
-    if (!concept.trim()) return;
+  // Step 1: Generate story (called from Composer)
+  const handleComposerSubmit = async (
+    concept: string,
+    settings: ComposerSettings,
+    _files: AttachmentFile[]
+  ) => {
+    if (!concept) return;
     setLoading(true);
     setError("");
     setProgress("正在生成故事...");
@@ -57,7 +58,7 @@ export default function Home() {
       const res = await fetch("/api/generate-story", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ concept, pageCount }),
+        body: JSON.stringify({ concept, pageCount: Number(settings.pages) }),
       });
 
       const data = await res.json();
@@ -93,7 +94,6 @@ export default function Home() {
 
       for (let i = 0; i < story.pages.length; i++) {
         const page = story.pages[i];
-        setCurrentPage(i);
 
         // Generate image
         setProgress(
@@ -131,10 +131,9 @@ export default function Home() {
 
       setProgress("所有片段已生成，正在合并视频...");
       setStep("merging");
-      
+
       // Merge videos
       await mergeVideosWithSubtitles(videoUrls, story.pages, story.title);
-      
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "未知错误";
       setError(message);
@@ -154,8 +153,7 @@ export default function Home() {
   ) => {
     try {
       const ffmpeg = await getFFmpeg();
-      
-      // Download all videos
+
       for (let i = 0; i < videoUrls.length; i++) {
         setProgress(`正在下载视频片段 ${i + 1}/${videoUrls.length}...`);
         const response = await fetch(videoUrls[i]);
@@ -163,35 +161,30 @@ export default function Home() {
         await ffmpeg.writeFile(`clip${i}.mp4`, new Uint8Array(data));
       }
 
-      // Create concat list
       setProgress("正在合并视频片段...");
       const concatList = videoUrls.map((_, i) => `file 'clip${i}.mp4'`).join("\n");
       await ffmpeg.writeFile("concat.txt", concatList);
 
-      // Merge videos
       await ffmpeg.exec([
         "-f", "concat", "-safe", "0",
         "-i", "concat.txt",
         "-c", "copy",
-        "-y", "merged.mp4"
+        "-y", "merged.mp4",
       ]);
 
-      // Read merged video
       const mergedData = await ffmpeg.readFile("merged.mp4");
-      const mergedBlob = new Blob([mergedData], { type: "video/mp4" });
+      const mergedBlob = new Blob([mergedData as BlobPart], { type: "video/mp4" });
       const mergedUrl = URL.createObjectURL(mergedBlob);
-      
+
       setMergedVideoUrl(mergedUrl);
       setProgress("完成！");
       setStep("result");
 
-      // Cleanup temp files
       for (let i = 0; i < videoUrls.length; i++) {
         try { await ffmpeg.deleteFile(`clip${i}.mp4`); } catch {}
       }
       try { await ffmpeg.deleteFile("concat.txt"); } catch {}
       try { await ffmpeg.deleteFile("merged.mp4"); } catch {}
-
     } catch (err) {
       console.error("Video merge error:", err);
       setError("视频合并失败，但您可以单独查看每个片段");
@@ -202,7 +195,6 @@ export default function Home() {
   // Download merged video
   const handleDownload = () => {
     if (!mergedVideoUrl || !story) return;
-    
     const a = document.createElement("a");
     a.href = mergedVideoUrl;
     a.download = `${story.title.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, "_")}_动画绘本.mp4`;
@@ -214,20 +206,17 @@ export default function Home() {
   // Share video
   const handleShare = async () => {
     if (!story) return;
-    
     const shareData = {
       title: `${story.title} - AI动画绘本`,
       text: `${story.hook}\n\n由 AI Storybook Director 生成`,
       url: window.location.href,
     };
-
     if (navigator.share) {
       try {
         await navigator.share(shareData);
         setShareSuccess(true);
         setTimeout(() => setShareSuccess(false), 3000);
-      } catch (err) {
-        // User cancelled or share failed
+      } catch {
         copyToClipboard();
       }
     } else {
@@ -235,7 +224,6 @@ export default function Home() {
     }
   };
 
-  // Copy link to clipboard
   const copyToClipboard = () => {
     navigator.clipboard.writeText(window.location.href);
     setShareSuccess(true);
@@ -244,55 +232,63 @@ export default function Home() {
 
   // Reset everything
   const handleReset = () => {
-    if (mergedVideoUrl) {
-      URL.revokeObjectURL(mergedVideoUrl);
-    }
+    if (mergedVideoUrl) URL.revokeObjectURL(mergedVideoUrl);
     setStep("input");
-    setConcept("");
     setStory(null);
     setImages([]);
     setVideos([]);
     setMergedVideoUrl(null);
     setProgress("");
     setError("");
-    setCurrentPage(0);
     setShareSuccess(false);
   };
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (mergedVideoUrl) {
-        URL.revokeObjectURL(mergedVideoUrl);
-      }
+      if (mergedVideoUrl) URL.revokeObjectURL(mergedVideoUrl);
     };
   }, [mergedVideoUrl]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50">
+    <div className="min-h-screen">
       {/* Header */}
-      <header className="bg-white/80 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-              AI Storybook Director
-            </h1>
-            <p className="text-sm text-gray-500">
-              将您的故事创意转化为动画绘本
-            </p>
+      <header className="flex items-center justify-between px-12 py-5 border-b border-[rgba(229,231,235,0.6)] bg-[rgba(255,255,255,0.7)] backdrop-blur-[14px] sticky top-0 z-10 max-sm:px-5 max-sm:py-3.5">
+        <div className="flex items-center gap-3 text-[17px] font-bold">
+          <div className="w-8 h-8 rounded-[9px] bg-[linear-gradient(135deg,#a855f7,#ec4899)] grid place-items-center text-white text-base shadow-[0_2px_8px_rgba(168,85,247,0.3)]">
+            ✦
           </div>
+          <span className="bg-[linear-gradient(135deg,#a855f7,#ec4899)] bg-clip-text text-transparent">
+            AI Storybook Director
+          </span>
+        </div>
+        <nav className="flex items-center gap-7 max-sm:gap-4">
+          <a href="#" className="text-[#6b7280] no-underline text-sm font-medium hover:text-[#111827] transition-colors max-sm:hidden">
+            画廊
+          </a>
+          <a href="#" className="text-[#6b7280] no-underline text-sm font-medium hover:text-[#111827] transition-colors max-sm:hidden">
+            案例
+          </a>
+          <a href="#" className="text-[#6b7280] no-underline text-sm font-medium hover:text-[#111827] transition-colors max-sm:hidden">
+            定价
+          </a>
           {step !== "input" && (
             <button
               onClick={handleReset}
-              className="text-sm text-gray-500 hover:text-gray-700 border border-gray-300 rounded-lg px-3 py-1.5 hover:bg-gray-50"
+              className="text-sm text-[#6b7280] hover:text-[#111827] border border-[#e5e7eb] rounded-lg px-3 py-1.5 hover:bg-[#f9fafb] transition-all"
             >
               重新开始
             </button>
           )}
-        </div>
+          <a
+            href="#"
+            className="px-4 py-2 bg-[#111827] text-white no-underline rounded-lg text-sm font-medium hover:bg-[#1f2937] transition-colors"
+          >
+            登录
+          </a>
+        </nav>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-8">
+      <main className="max-w-[880px] mx-auto px-6 pt-16 pb-30 max-sm:px-4 max-sm:pt-8 max-sm:pb-16">
         {/* Success Banner */}
         {shareSuccess && (
           <div className="mb-6 bg-green-50 border border-green-200 rounded-xl p-4 text-green-700">
@@ -318,68 +314,25 @@ export default function Home() {
           </div>
         )}
 
-        {/* Step 1: Input */}
+        {/* Step 1: Input — Hero + Composer */}
         {step === "input" && (
-          <div className="max-w-2xl mx-auto">
-            <div className="bg-white rounded-2xl shadow-lg p-8">
-              <h2 className="text-xl font-semibold mb-2">
-                您想创作什么样的故事？
-              </h2>
-              <p className="text-gray-500 mb-6">
-                输入一个故事创意，我们将为您生成完整的动画绘本。
+          <div>
+            {/* Hero */}
+            <section className="text-center mb-2">
+              <h1 className="text-[56px] font-extrabold tracking-[-0.03em] mb-4 leading-[1.05] max-sm:text-[36px]">
+                把任何故事变成
+                <br />
+                <span className="bg-[linear-gradient(135deg,#a855f7,#ec4899)] bg-clip-text text-transparent">
+                  动态绘本
+                </span>
+              </h1>
+              <p className="text-[17px] text-[#6b7280] max-w-[540px] mx-auto max-sm:text-[15px]">
+                输入一句话、上传一张参考图，AI 帮你生成完整的角色、画面和配乐。
               </p>
+            </section>
 
-              <textarea
-                value={concept}
-                onChange={(e) => setConcept(e.target.value)}
-                placeholder='例如："一只小兔子去月球旅行"、"爱丽丝梦游仙境"、"一只勇敢的猫拯救森林"...'
-                className="w-full h-32 p-4 border border-gray-300 rounded-xl text-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              />
-
-              <div className="mt-4 flex items-center gap-4">
-                <label className="text-sm text-gray-600">页数：</label>
-                <select
-                  value={pageCount}
-                  onChange={(e) => setPageCount(Number(e.target.value))}
-                  className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  {[3, 4, 5, 6, 7, 8].map((n) => (
-                    <option key={n} value={n}>
-                      {n} 页
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <button
-                onClick={handleGenerateStory}
-                disabled={loading || !concept.trim()}
-                className="mt-6 w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold py-3 px-6 rounded-xl hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-              >
-                {loading ? "生成中..." : "生成故事"}
-              </button>
-            </div>
-
-            {/* Examples */}
-            <div className="mt-6">
-              <p className="text-sm text-gray-500 mb-3">试试这些创意：</p>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  "一只小兔子去月球旅行",
-                  "一只勇敢的猫拯救魔法森林",
-                  "一个女孩发现了通往糖果世界的门",
-                  "一个机器人学习画画",
-                ].map((example) => (
-                  <button
-                    key={example}
-                    onClick={() => setConcept(example)}
-                    className="text-sm bg-white border border-gray-200 rounded-full px-4 py-2 hover:bg-purple-50 hover:border-purple-300 transition-colors"
-                  >
-                    {example}
-                  </button>
-                ))}
-              </div>
-            </div>
+            {/* Composer */}
+            <Composer onSubmit={handleComposerSubmit} loading={loading} />
           </div>
         )}
 
@@ -473,7 +426,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Show images as they're generated */}
             {images.length > 0 && (
               <div className="mt-6">
                 <h3 className="text-lg font-semibold mb-3">已生成的图片</h3>
@@ -513,7 +465,6 @@ export default function Home() {
         {/* Step 4: Result */}
         {step === "result" && story && (
           <div>
-            {/* Merged Video Player */}
             {mergedVideoUrl && (
               <div className="bg-white rounded-2xl shadow-lg p-8 mb-6">
                 <div className="flex items-center justify-between mb-4">
@@ -525,7 +476,6 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Main Video Player */}
                 <div className="relative rounded-xl overflow-hidden bg-black mb-6">
                   <video
                     ref={videoRef}
@@ -536,7 +486,6 @@ export default function Home() {
                   />
                 </div>
 
-                {/* Subtitle Display */}
                 <div className="bg-gray-900 text-white rounded-xl p-6 mb-6">
                   <h3 className="text-sm font-medium text-gray-400 mb-3">故事字幕</h3>
                   <div className="space-y-3 max-h-48 overflow-y-auto">
@@ -551,7 +500,6 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Action Buttons */}
                 <div className="flex flex-wrap gap-3">
                   <button
                     onClick={handleDownload}
@@ -581,7 +529,6 @@ export default function Home() {
               </div>
             )}
 
-            {/* Individual Clips (if merge failed or as alternative) */}
             {!mergedVideoUrl && videos.length > 0 && (
               <div className="bg-white rounded-2xl shadow-lg p-8 mb-6">
                 <h3 className="text-lg font-semibold mb-4">视频片段</h3>
@@ -608,7 +555,6 @@ export default function Home() {
               </div>
             )}
 
-            {/* Images only (if videos failed) */}
             {videos.length === 0 && images.length > 0 && (
               <div className="bg-white rounded-2xl shadow-lg p-8 mb-6">
                 <h3 className="text-lg font-semibold mb-4">故事插图</h3>
@@ -631,12 +577,6 @@ export default function Home() {
               </div>
             )}
 
-            {/* Create Another Story Button (if not shown above) */}
-            {mergedVideoUrl && (
-              <div className="text-center text-gray-400 text-sm">
-                <p>想要创作另一个故事？点击上方的"创作新故事"按钮</p>
-              </div>
-            )}
             {!mergedVideoUrl && (
               <button
                 onClick={handleReset}

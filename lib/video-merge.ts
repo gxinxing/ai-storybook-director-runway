@@ -56,7 +56,7 @@ export async function mergeVideos(
 
   // Read the merged video
   const data = await ffmpeg.readFile("output.mp4");
-  return new Blob([data], { type: "video/mp4" });
+  return new Blob([data as BlobPart], { type: "video/mp4" });
 }
 
 /**
@@ -118,7 +118,7 @@ export async function createStoryVideo(
   ]);
 
   const data = await ffmpeg.readFile("story.mp4");
-  return new Blob([data], { type: "video/mp4" });
+  return new Blob([data as BlobPart], { type: "video/mp4" });
 }
 
 /**
