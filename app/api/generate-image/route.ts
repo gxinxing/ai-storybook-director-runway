@@ -8,9 +8,13 @@ export async function POST(req: NextRequest) {
   req.signal.addEventListener("abort", () => abortController.abort());
 
   try {
-    const { sceneDescription, styleHint } = await req.json();
+    const body = await req.json();
+    console.log("Generate image request body:", JSON.stringify(body));
+    
+    const { sceneDescription, styleHint } = body;
 
     if (!sceneDescription || typeof sceneDescription !== "string") {
+      console.error("Invalid sceneDescription:", sceneDescription);
       return NextResponse.json(
         { error: "场景描述不能为空" },
         { status: 400 }
@@ -36,9 +40,12 @@ export async function POST(req: NextRequest) {
     if (error instanceof Error && error.message === "Operation cancelled") {
       return NextResponse.json({ error: "已取消" }, { status: 499 });
     }
-    console.error("Image generation error:", error);
+    // Log detailed error for debugging
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("Image generation error:", errorMessage);
+    console.error("Full error:", error);
     return NextResponse.json(
-      { error: "图片生成失败，请稍后重试" },
+      { error: `图片生成失败: ${errorMessage}` },
       { status: 500 }
     );
   }

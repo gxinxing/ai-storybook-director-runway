@@ -46,8 +46,14 @@ export async function generateImage(
 
   if (!res.ok) {
     let errorDetail = "";
-    try { errorDetail = await res.text(); } catch {}
-    throw new Error(`Image generation failed (${res.status})`);
+    try { 
+      const errorJson = await res.json();
+      errorDetail = JSON.stringify(errorJson);
+    } catch {
+      try { errorDetail = await res.text(); } catch {}
+    }
+    console.error("Runway API error:", res.status, errorDetail);
+    throw new Error(`Image generation failed (${res.status}): ${errorDetail}`);
   }
 
   const data = await res.json();
@@ -111,8 +117,14 @@ export async function generateVideo(
 
   if (!res.ok) {
     let errorDetail = "";
-    try { errorDetail = await res.text(); } catch {}
-    throw new Error(`Video generation failed (${res.status})`);
+    try { 
+      const errorJson = await res.json();
+      errorDetail = JSON.stringify(errorJson);
+    } catch {
+      try { errorDetail = await res.text(); } catch {}
+    }
+    console.error("Runway video API error:", res.status, errorDetail);
+    throw new Error(`Video generation failed (${res.status}): ${errorDetail}`);
   }
 
   const data = await res.json();
