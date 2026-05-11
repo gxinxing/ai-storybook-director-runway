@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Storybook Director - Diagnostics</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #8b5cf6;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            background: #f9fafb;
+            border-radius: 8px;
+        }
+        .test-btn {
+            background: #8b5cf6;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        .test-btn:hover {
+            background: #7c3aed;
+        }
+        .result {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+        }
+        .success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #34d399;
+        }
+        .error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #f87171;
+        }
+        .loading {
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fbbf24;
+        }
+        pre {
+            background: #1f2937;
+            color: #f3f4f6;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 12px;
+            max-height: 300px;
+        }
+        .info {
+            background: #dbeafe;
+            color: #1e40af;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 AI Storybook Director - 诊断工具</h1>
+        
+        <div class="info">
+            <strong>使用说明：</strong><br>
+            1. 点击下方测试按钮<br>
+            2. 查看测试结果和错误信息<br>
+            3. 如果所有测试通过但仍有问题，请尝试：<br>
+            &nbsp;&nbsp;&nbsp;- 清除浏览器缓存<br>
+            &nbsp;&nbsp;&nbsp;- 使用 Chrome 浏览器<br>
+            &nbsp;&nbsp;&nbsp;- 禁用浏览器扩展<br>
+            &nbsp;&nbsp;&nbsp;- 检查网络连接
+        </div>
+        
+        <div class="test-section">
+            <h3>1️⃣ 测试故事生成 API</h3>
+            <button class="test-btn" onclick="testStory()">测试故事生成</button>
+            <div id="story-result" class="result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>2️⃣ 测试图片生成 API</h3>
+            <button class="test-btn" onclick="testImage()">测试图片生成</button>
+            <div id="image-result" class="result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>3️⃣ 测试视频生成 API</h3>
+            <button class="test-btn" onclick="testVideo()">测试视频生成</button>
+            <div id="video-result" class="result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>4️⃣ 测试网络连接</h3>
+            <button class="test-btn" onclick="testNetwork()">测试网络</button>
+            <div id="network-result" class="result"></div>
+        </div>
+    </div>
+    
+    <script>
+        const BASE_URL = 'https://ai-storybook-director.vercel.app';
+        
+        function showResult(elementId, type, message, data = null) {
+            const el = document.getElementById(elementId);
+            el.className = `result ${type}`;
+            el.style.display = 'block';
+            
+            let html = `<strong>${type === 'success' ? '✅ 成功' : type === 'error' ? '❌ 失败' : '⏳ 进行中'}</strong><br>`;
+            html += message;
+            if (data) {
+                html += `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            }
+            el.innerHTML = html;
+        }
+        
+        async function testStory() {
+            showResult('story-result', 'loading', '正在测试故事生成 API...');
+            
+            try {
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 60000);
+                
+                const start = Date.now();
+                const response = await fetch(`${BASE_URL}/api/generate-story`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        concept: '小兔子找妈妈',
+                        pageCount: 1,
+                        style: '水彩',
+                        age: '3-6',
+                        lang: '中文'
+                    }),
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeout);
+                const duration = Date.now() - start;
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    showResult('story-result', 'success', 
+                        `✅ 故事生成成功！<br>标题: ${data.title}<br>响应时间: ${duration}ms`,
+                        { pages: data.pages?.length, theme: data.theme }
+                    );
+                } else {
+                    const error = await response.json();
+                    showResult('story-result', 'error', 
+                        `❌ API 错误 (${response.status})<br>错误信息: ${error.error || 'Unknown error'}`,
+                        error
+                    );
+                }
+            } catch (err) {
+                showResult('story-result', 'error', 
+                    `❌ 网络错误<br>错误类型: ${err.name}<br>错误信息: ${err.message}<br><br>这可能是：<br>- 网络连接问题<br>- CORS 跨域限制<br>- 请求超时`,
+                    { error: err.message }
+                );
+            }
+        }
+        
+        async function testImage() {
+            showResult('image-result', 'loading', '正在测试图片生成 API（可能需要 30 秒）...');
+            
+            try {
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 120000);
+                
+                const response = await fetch(`${BASE_URL}/api/generate-image`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sceneDescription: 'A cute white rabbit sitting on a moon',
+                        styleHint: 'watercolor'
+                    }),
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeout);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    showResult('image-result', 'success', 
+                        `✅ 图片生成成功！<br>Task ID: ${data.taskId || 'N/A'}`,
+                        { imageUrl: data.imageUrl }
+                    );
+                } else {
+                    const error = await response.json();
+                    showResult('image-result', 'error', 
+                        `❌ API 错误 (${response.status})<br>错误信息: ${error.error || 'Unknown error'}`,
+                        error
+                    );
+                }
+            } catch (err) {
+                showResult('image-result', 'error', 
+                    `❌ 网络错误<br>错误类型: ${err.name}<br>错误信息: ${err.message}<br><br>图片生成需要较长时间，请耐心等待。`,
+                    { error: err.message }
+                );
+            }
+        }
+        
+        async function testVideo() {
+            showResult('video-result', 'loading', '正在测试视频生成 API（可能需要 60 秒）...');
+            
+            showResult('video-result', 'error', 
+                '⚠️ 视频生成需要先有图片<br>请先测试图片生成 API',
+                { note: 'Video generation requires an image first' }
+            );
+        }
+        
+        async function testNetwork() {
+            showResult('network-result', 'loading', '正在测试网络连接...');
+            
+            try {
+                const start = Date.now();
+                const response = await fetch(BASE_URL);
+                const duration = Date.now() - start;
+                
+                showResult('network-result', 'success', 
+                    `✅ 网络连接正常<br>响应时间: ${duration}ms<br>状态: ${response.status}`,
+                    { status: response.status, ok: response.ok }
+                );
+            } catch (err) {
+                showResult('network-result', 'error', 
+                    `❌ 网络连接失败<br>错误信息: ${err.message}<br><br>请检查：<br>- 网络是否正常<br>- 是否可以访问其他网站`,
+                    { error: err.message }
+                );
+            }
+        }
+    </script>
+</body>
+</html>
