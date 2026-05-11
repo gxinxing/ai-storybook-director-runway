@@ -333,12 +333,6 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
     ta.style.height = Math.min(ta.scrollHeight, 240) + "px";
   }, []);
 
-  /* Close popovers */
-  const closePopovers = useCallback((except?: string | null) => {
-    if (except !== "attach") setOpenPopover((prev) => (prev === "attach" ? null : prev));
-    if (except !== "settings") setOpenPopover((prev) => (prev === "settings" ? null : prev));
-  }, []);
-
   const togglePopover = useCallback(
     (name: "attach" | "settings") => {
       setOpenPopover((prev) => (prev === name ? null : name));
@@ -463,10 +457,6 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
       document.removeEventListener("keydown", keyHandler);
     };
   }, []);
-
-  /* Expose setGenStep & setShowModal for parent */
-  // We use a ref-based approach: parent calls via a callback
-  // For simplicity, we'll use a prop-based approach in the integration
 
   return (
     <>
@@ -658,7 +648,7 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
                         受众
                       </div>
                       <SegGroup
-                        options={["0–3", "3–6", "6–9", "9+"].map((v) => `${v}${v === "9+" ? "" : ""}`)}
+                        options={["0–3", "3–6", "6–9", "9+"]}
                         value={settings.age}
                         onChange={(v) => setSettings((s) => ({ ...s, age: v }))}
                       />

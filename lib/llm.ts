@@ -72,6 +72,57 @@ Return ONLY valid JSON in this exact format:
 }`;
 }
 
+/**
+ * Validate that the parsed JSON matches the Story interface
+ */
+function validateStory(data: unknown): Story {
+  if (!data || typeof data !== "object") {
+    throw new Error("LLM response is not a valid object");
+  }
+  const obj = data as Record<string, unknown>;
+  if (typeof obj.title !== "string" || obj.title.trim().length === 0) {
+    throw new Error("LLM response missing 'title'");
+  }
+  if (!Array.isArray(obj.pages) || obj.pages.length === 0) {
+    throw new Error("LLM response missing 'pages' array");
+  }
+  const pages = (obj.pages as unknown[]).map((p, i) => {
+    const page = p as Record<string, unknown>;
+    if (typeof page.narration !== "string" || typeof page.scene_description !== "string") {
+      throw new Error(`Page ${i + 1} missing required fields (narration, scene_description)`);
+    }
+    return {
+      page: i + 1,
+      narration: page.narration as string,
+      scene_description: page.scene_description as string,
+      emotion: (typeof page.emotion === "string" ? page.emotion : "neutral") as string,
+    };
+  });
+  return {
+    title: obj.title as string,
+    hook: (typeof obj.hook === "string" ? obj.hook : "") as string,
+    theme: (typeof obj.theme === "string" ? obj.theme : "") as string,
+    pages,
+  };
+}
+
+function parseStoryResponse(content: string): Story {
+  // Try direct parse first
+  try {
+    const data = JSON.parse(content);
+    return validateStory(data);
+  } catch {
+    // Try stripping markdown code blocks (Claude sometimes wraps in ```json)
+    const cleaned = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    try {
+      const data = JSON.parse(cleaned);
+      return validateStory(data);
+    } catch {
+      throw new Error("LLM response is not valid JSON or missing required fields");
+    }
+  }
+}
+
 async function callDeepSeek(prompt: string): Promise<Story> {
   const res = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
@@ -94,7 +145,7 @@ async function callDeepSeek(prompt: string): Promise<Story> {
 
   const data = await res.json();
   const content = data.choices[0].message.content;
-  return JSON.parse(content) as Story;
+  return parseStoryResponse(content);
 }
 
 async function callOpenAI(prompt: string): Promise<Story> {
@@ -119,7 +170,7 @@ async function callOpenAI(prompt: string): Promise<Story> {
 
   const data = await res.json();
   const content = data.choices[0].message.content;
-  return JSON.parse(content) as Story;
+  return parseStoryResponse(content);
 }
 
 async function callClaude(prompt: string): Promise<Story> {
@@ -129,7 +180,6 @@ async function callClaude(prompt: string): Promise<Story> {
       "Content-Type": "application/json",
       "x-api-key": process.env.ANTHROPIC_API_KEY || "",
       "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
@@ -145,9 +195,7 @@ async function callClaude(prompt: string): Promise<Story> {
 
   const data = await res.json();
   const content = data.content[0].text;
-  // Claude might wrap JSON in markdown code blocks
-  const jsonStr = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-  return JSON.parse(jsonStr) as Story;
+  return parseStoryResponse(content);
 }
 
 export async function generateStory(

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import Composer, { type ComposerSettings, type AttachmentFile } from "./components/Composer";
-import { createStoryVideo, shareContent } from "@/lib/video-merge";
+import { mergeVideos, shareContent } from "@/lib/video-merge";
 
 type Step = "input" | "story" | "generating" | "merging" | "result";
 
@@ -32,6 +32,7 @@ export default function Home() {
   const [shareSuccess, setShareSuccess] = useState(false);
   const [genStep, setGenStep] = useState(-1);
   const [showModal, setShowModal] = useState(false);
+  const [currentGenIndex, setCurrentGenIndex] = useState(-1);
   const videoRef = useRef<HTMLVideoElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const settingsRef = useRef<ComposerSettings | null>(null);
@@ -101,6 +102,7 @@ export default function Home() {
     setImages([]);
     setVideos([]);
     setMergedVideoUrl(null);
+    setCurrentGenIndex(-1);
 
     // Build style hint from settings stored in story generation
     const currentStyle = settingsRef.current?.styleLabel || "水彩";
@@ -122,6 +124,7 @@ export default function Home() {
         const page = story.pages[i];
 
         // Generate image
+        setCurrentGenIndex(i * 2); // even = generating image
         setProgress(
           `正在生成图片 ${i + 1}/${story.pages.length}: ${page.emotion}...`
         );
@@ -140,6 +143,7 @@ export default function Home() {
         imageUrls.push(imgData.imageUrl);
 
         // Generate video
+        setCurrentGenIndex(i * 2 + 1); // odd = generating video
         setProgress(
           `正在生成视频 ${i + 1}/${story.pages.length}: ${page.emotion}...`
         );
@@ -166,11 +170,10 @@ export default function Home() {
       setProgress("所有片段已生成，正在合并视频...");
       setStep("merging");
 
-      // Merge videos with narration subtitles
-      const blob = await createStoryVideo(
+      // Merge videos (no burn-in subtitles — FFmpeg.wasm lacks CJK fonts,
+      // subtitles are shown in the UI below the video player)
+      const blob = await mergeVideos(
         videoUrls,
-        story.pages.map((p) => p.narration),
-        story.title,
         { onProgress: setProgress }
       );
 
@@ -224,12 +227,9 @@ export default function Home() {
     );
     if (!ok) {
       navigator.clipboard.writeText(window.location.href);
-      setShareSuccess(true);
-      setTimeout(() => setShareSuccess(false), 3000);
-    } else {
-      setShareSuccess(true);
-      setTimeout(() => setShareSuccess(false), 3000);
     }
+    setShareSuccess(true);
+    setTimeout(() => setShareSuccess(false), 3000);
   };
 
   // Reset everything
@@ -429,21 +429,19 @@ export default function Home() {
                       <p className="text-xs text-gray-400">{page.emotion}</p>
                     </div>
                     <div className="shrink-0">
-                      {idx < videos.length ? (
-                        <span className="text-green-600 text-sm">
-                          ✓ 视频完成
-                        </span>
-                      ) : idx < images.length ? (
-                        <span className="text-green-600 text-sm">
-                          ✓ 图片完成
-                        </span>
-                      ) : idx === Math.floor(images.length / 2) * 2 && loading ? (
-                        <span className="text-blue-600 text-sm animate-pulse">
-                          生成中...
-                        </span>
-                      ) : (
-                        <span className="text-gray-300 text-sm">等待中</span>
-                      )}
+                      {(() => {
+                        const imgDone = idx < images.length;
+                        const vidDone = idx < videos.length;
+                        const genImgIdx = idx * 2;
+                        const genVidIdx = idx * 2 + 1;
+                        const isGenImg = currentGenIndex === genImgIdx && loading;
+                        const isGenVid = currentGenIndex === genVidIdx && loading;
+                        if (vidDone) return <span className="text-green-600 text-sm">✓ 视频完成</span>;
+                        if (imgDone) return <span className="text-green-600 text-sm">✓ 图片完成</span>;
+                        if (isGenVid) return <span className="text-blue-600 text-sm animate-pulse">生成视频中...</span>;
+                        if (isGenImg) return <span className="text-blue-600 text-sm animate-pulse">生成图片中...</span>;
+                        return <span className="text-gray-300 text-sm">等待中</span>;
+                      })()}
                     </div>
                   </div>
                 ))}

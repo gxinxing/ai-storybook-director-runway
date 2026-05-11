@@ -15,8 +15,10 @@ export async function GET(req: NextRequest) {
     const task = await getTaskStatus(taskId);
     return NextResponse.json(task);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Failed to get task status";
-    console.error("Task status error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("Task status error:", error);
+    return NextResponse.json(
+      { error: "获取任务状态失败" },
+      { status: 500 }
+    );
   }
 }

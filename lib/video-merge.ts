@@ -36,8 +36,21 @@ export async function mergeVideos(
 
   onProgress?.("正在合并视频片段...");
 
-  // Build filter_complex: normalize each clip → concat
-  const videoParts = videoUrls
+  // Fast path for single video — just normalize and re-encode
+  if (videoUrls.length === 1) {
+    await ffmpeg.exec([
+      "-i", "clip0.mp4",
+      "-filter_complex",
+      `[0:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1[v];[0:a]aresample=44100[a]`,
+      "-map", "[v]", "-map", "[a]",
+      "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+      "-c:a", "aac", "-b:a", "128k",
+      "-movflags", "+faststart",
+      "-y", "merged.mp4",
+    ]);
+  } else {
+    // Build filter_complex: normalize each clip → concat
+    const videoParts = videoUrls
     .map(
       (_, i) =>
         `[${i}:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1[v${i}];`
@@ -63,6 +76,7 @@ export async function mergeVideos(
     "-movflags", "+faststart",
     "-y", "merged.mp4",
   ]);
+  }
 
   const mergedData = await ffmpeg.readFile("merged.mp4");
   const blob = new Blob([mergedData as BlobPart], { type: "video/mp4" });
@@ -102,7 +116,25 @@ export async function createStoryVideo(
 
   onProgress?.("正在添加字幕并合并...");
 
-  // Build filter_complex: normalize + drawtext + concat
+  // Fast path for single video
+  if (videoUrls.length === 1) {
+    const safeText = (narrations[0] ?? "")
+      .replace(/\\/g, "\\\\")
+      .replace(/'/g, "'\\''")
+      .replace(/:/g, "\\:")
+      .replace(/%/g, "\\%");
+    await ffmpeg.exec([
+      "-i", "clip0.mp4",
+      "-filter_complex",
+      `[0:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1,drawtext=text='${safeText}':fontcolor=white:fontsize=22:box=1:boxcolor=black@0.5:boxborderw=8:x=(w-text_w)/2:y=h-text_h-50[v];[0:a]aresample=44100[a]`,
+      "-map", "[v]", "-map", "[a]",
+      "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+      "-c:a", "aac", "-b:a", "128k",
+      "-movflags", "+faststart",
+      "-y", "story.mp4",
+    ]);
+  } else {
+    // Build filter_complex: normalize + drawtext + concat
   const filterParts: string[] = [];
   for (let i = 0; i < videoUrls.length; i++) {
     const safeText = (narrations[i] ?? "")
@@ -129,6 +161,7 @@ export async function createStoryVideo(
     "-movflags", "+faststart",
     "-y", "story.mp4",
   ]);
+  }
 
   const data = await ffmpeg.readFile("story.mp4");
   const blob = new Blob([data as BlobPart], { type: "video/mp4" });
