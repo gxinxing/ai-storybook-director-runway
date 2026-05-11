@@ -4,7 +4,7 @@ const RUNWAY_VERSION = "2024-11-06";
 function getHeaders(): Record<string, string> {
   const key = process.env.RUNWAY_API_KEY;
   if (!key) {
-    throw new Error("RUNWAY_API_KEY is not configured");
+    throw new Error("RUNWAY_API_KEY is not configured (API key missing) - Please check your .env.local file");
   }
   return {
     Authorization: `Bearer ${key}`,
@@ -46,14 +46,16 @@ export async function generateImage(
 
   if (!res.ok) {
     let errorDetail = "";
+    let errorCode = "";
     try { 
       const errorJson = await res.json();
       errorDetail = JSON.stringify(errorJson);
+      errorCode = errorJson?.code || errorJson?.error?.code || "";
     } catch {
       try { errorDetail = await res.text(); } catch {}
     }
-    console.error("Runway API error:", res.status, errorDetail);
-    throw new Error(`Image generation failed (${res.status}): ${errorDetail}`);
+    console.error("Runway API error:", res.status, res.statusText, errorCode, errorDetail);
+    throw new Error(`Runway API error (${res.status}${errorCode ? `, code: ${errorCode}` : ""}): ${errorDetail}`);
   }
 
   const data = await res.json();
@@ -163,19 +165,25 @@ export async function getTaskStatus(taskId: string): Promise<TaskResult> {
 export async function waitForTask(
   taskId: string,
   maxWaitMs: number = 300000,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  taskType: "image" | "video" | "audio" = "image"
 ): Promise<TaskResult> {
   const start = Date.now();
-  let pollInterval = 3000; // Start with 3s, back off on throttle
+  const baseInterval = taskType === "image" ? 2000 : taskType === "video" ? 4000 : 3000;
+  let pollInterval = baseInterval;
   let consecutiveThrottled = 0;
+  let lastStatus: string | null = null;
+  let sameStatusCount = 0;
+  let lastTask: TaskResult | null = null;
 
   while (Date.now() - start < maxWaitMs) {
-    // Check if caller cancelled
     if (signal?.aborted) {
       throw new Error("Operation cancelled");
     }
 
     const task = await getTaskStatus(taskId);
+    lastTask = task;
+    console.log(`[waitForTask] taskId=${taskId} status=${task.status} type=${taskType}`);
 
     if (task.status === "SUCCEEDED") return task;
     if (task.status === "FAILED") {
@@ -186,16 +194,28 @@ export async function waitForTask(
       );
     }
 
-    // Handle THROTTLED with exponential backoff
-    if (task.status === "THROTTLED") {
-      consecutiveThrottled++;
-      pollInterval = Math.min(3000 * Math.pow(1.5, consecutiveThrottled), 15000);
+    if (task.status === lastStatus) {
+      sameStatusCount++;
     } else {
-      consecutiveThrottled = 0;
-      pollInterval = 3000;
+      sameStatusCount = 0;
+      lastStatus = task.status;
     }
 
-    // Wait before next poll
+    if (task.status === "THROTTLED") {
+      consecutiveThrottled++;
+      pollInterval = Math.min(baseInterval * Math.pow(1.8, consecutiveThrottled), 20000);
+    } else if (task.status === "PENDING") {
+      consecutiveThrottled = 0;
+      pollInterval = Math.min(baseInterval * 1.5, 8000);
+    } else {
+      consecutiveThrottled = 0;
+      if (sameStatusCount > 5) {
+        pollInterval = Math.min(pollInterval * 1.2, 10000);
+      } else {
+        pollInterval = baseInterval;
+      }
+    }
+
     await new Promise((r, reject) => {
       const timer = setTimeout(r, pollInterval);
       signal?.addEventListener("abort", () => {
@@ -205,5 +225,53 @@ export async function waitForTask(
     });
   }
 
-  throw new Error("Generation timed out. Please try again.");
+  const elapsed = Date.now() - start;
+  const lastStatusInfo = lastTask ? `status=${lastTask.status}, failureReason=${lastTask.failureReason || "none"}` : "no status retrieved";
+  throw new Error(`Generation timed out after ${elapsed}ms (max: ${maxWaitMs}ms). Last: ${lastStatusInfo}`);
+}
+
+/**
+ * Generate speech from text using Runway text_to_speech API
+ */
+export async function generateSpeech(
+  text: string,
+  voice: string = "Maya",
+  model: string = "eleven_multilingual_v2"
+): Promise<{ taskId: string }> {
+  if (!text || typeof text !== "string") {
+    throw new Error("text must be a non-empty string");
+  }
+
+  const voicePresets = ["Maya", "Bernard", "Ella", "James", "Sofia", "Adam"];
+  const presetId = voicePresets.includes(voice) ? voice : "Maya";
+
+  const res = await fetch(`${RUNWAY_API}/v1/text_to_speech`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({
+      model,
+      promptText: text.substring(0, 1000),
+      voice: { type: "runway-preset", presetId },
+    }),
+  });
+
+  if (!res.ok) {
+    let errorDetail = "";
+    let errorCode = "";
+    try { 
+      const errorJson = await res.json();
+      errorDetail = JSON.stringify(errorJson);
+      errorCode = errorJson?.code || errorJson?.error?.code || "";
+    } catch {
+      try { errorDetail = await res.text(); } catch {}
+    }
+    console.error("Runway TTS API error:", res.status, res.statusText, errorCode, errorDetail);
+    throw new Error(`TTS generation failed (${res.status}${errorCode ? `, code: ${errorCode}` : ""}): ${errorDetail}`);
+  }
+
+  const data = await res.json();
+  if (!data.id) {
+    throw new Error("TTS generation returned no task ID");
+  }
+  return { taskId: data.id };
 }

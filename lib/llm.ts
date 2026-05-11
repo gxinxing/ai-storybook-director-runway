@@ -107,28 +107,47 @@ function validateStory(data: unknown): Story {
 }
 
 function parseStoryResponse(content: string): Story {
-  // Try direct parse first
+  if (!content || typeof content !== "string") {
+    throw new Error(`Invalid response content: expected string, got ${typeof content}`);
+  }
+
+  const trimmed = content.trim();
+  if (!trimmed) {
+    throw new Error("LLM response is empty");
+  }
+
   try {
-    const data = JSON.parse(content);
+    const data = JSON.parse(trimmed);
     return validateStory(data);
-  } catch {
-    // Try stripping markdown code blocks (Claude sometimes wraps in ```json)
-    const cleaned = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const msg2 = `LLM response parse error: ${msg}`;
+    
     try {
-      const data = JSON.parse(cleaned);
-      return validateStory(data);
+      const cleaned = trimmed.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      if (cleaned !== trimmed) {
+        const data2 = JSON.parse(cleaned);
+        return validateStory(data2);
+      }
     } catch {
-      throw new Error("LLM response is not valid JSON or missing required fields");
+      throw new Error(`${msg2}\nRaw content: ${trimmed.substring(0, 500)}`);
     }
+    
+    throw new Error(`${msg2}\nRaw content: ${trimmed.substring(0, 500)}`);
   }
 }
 
 async function callDeepSeek(prompt: string): Promise<Story> {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  if (!apiKey) {
+    throw new Error("DeepSeek API key is not configured - Please check your .env.local file");
+  }
+
   const res = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
       model: "deepseek-chat",
@@ -140,20 +159,45 @@ async function callDeepSeek(prompt: string): Promise<Story> {
 
   if (!res.ok) {
     const error = await res.text();
-    throw new Error(`DeepSeek API error: ${res.status} - ${error}`);
+    const status = res.status;
+    let errorMsg = `DeepSeek API error (${status}): ${error}`;
+    
+    if (status === 401) {
+      errorMsg = `DeepSeek API authentication failed (401): Invalid API key - Please check your .env.local file`;
+    } else if (status === 429) {
+      errorMsg = `DeepSeek API rate limit exceeded (429): Please try again later`;
+    } else if (status >= 500) {
+      errorMsg = `DeepSeek API server error (${status}): ${error}`;
+    }
+    
+    throw new Error(errorMsg);
   }
 
   const data = await res.json();
+  
+  if (!data.choices || !Array.isArray(data.choices) || data.choices.length === 0) {
+    throw new Error(`DeepSeek API returned unexpected format: ${JSON.stringify(data).substring(0, 200)}`);
+  }
+  
+  if (!data.choices[0] || !data.choices[0].message || typeof data.choices[0].message.content !== "string") {
+    throw new Error(`DeepSeek API response missing expected fields: ${JSON.stringify(data).substring(0, 200)}`);
+  }
+  
   const content = data.choices[0].message.content;
   return parseStoryResponse(content);
 }
 
 async function callOpenAI(prompt: string): Promise<Story> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OpenAI API key is not configured - Please check your .env.local file");
+  }
+
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
       model: "gpt-4o",
@@ -165,20 +209,45 @@ async function callOpenAI(prompt: string): Promise<Story> {
 
   if (!res.ok) {
     const error = await res.text();
-    throw new Error(`OpenAI API error: ${res.status} - ${error}`);
+    const status = res.status;
+    let errorMsg = `OpenAI API error (${status}): ${error}`;
+    
+    if (status === 401) {
+      errorMsg = `OpenAI API authentication failed (401): Invalid API key - Please check your .env.local file`;
+    } else if (status === 429) {
+      errorMsg = `OpenAI API rate limit exceeded (429): Please try again later`;
+    } else if (status >= 500) {
+      errorMsg = `OpenAI API server error (${status}): ${error}`;
+    }
+    
+    throw new Error(errorMsg);
   }
 
   const data = await res.json();
+  
+  if (!data.choices || !Array.isArray(data.choices) || data.choices.length === 0) {
+    throw new Error(`OpenAI API returned unexpected format: ${JSON.stringify(data).substring(0, 200)}`);
+  }
+  
+  if (!data.choices[0] || !data.choices[0].message || typeof data.choices[0].message.content !== "string") {
+    throw new Error(`OpenAI API response missing expected fields: ${JSON.stringify(data).substring(0, 200)}`);
+  }
+  
   const content = data.choices[0].message.content;
   return parseStoryResponse(content);
 }
 
 async function callClaude(prompt: string): Promise<Story> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error("Anthropic API key is not configured - Please check your .env.local file");
+  }
+
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": process.env.ANTHROPIC_API_KEY || "",
+      "x-api-key": apiKey,
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
@@ -190,10 +259,30 @@ async function callClaude(prompt: string): Promise<Story> {
 
   if (!res.ok) {
     const error = await res.text();
-    throw new Error(`Claude API error: ${res.status} - ${error}`);
+    const status = res.status;
+    let errorMsg = `Claude API error (${status}): ${error}`;
+    
+    if (status === 401) {
+      errorMsg = `Claude API authentication failed (401): Invalid API key - Please check your .env.local file`;
+    } else if (status === 429) {
+      errorMsg = `Claude API rate limit exceeded (429): Please try again later`;
+    } else if (status >= 500) {
+      errorMsg = `Claude API server error (${status}): ${error}`;
+    }
+    
+    throw new Error(errorMsg);
   }
 
   const data = await res.json();
+  
+  if (!data.content || !Array.isArray(data.content) || data.content.length === 0) {
+    throw new Error(`Claude API returned unexpected format: ${JSON.stringify(data).substring(0, 200)}`);
+  }
+  
+  if (!data.content[0] || !data.content[0].text || typeof data.content[0].text !== "string") {
+    throw new Error(`Claude API response missing expected fields: ${JSON.stringify(data).substring(0, 200)}`);
+  }
+  
   const content = data.content[0].text;
   return parseStoryResponse(content);
 }

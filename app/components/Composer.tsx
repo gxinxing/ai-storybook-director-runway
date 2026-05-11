@@ -10,8 +10,6 @@ import {
   type ReactNode,
 } from "react";
 
-/* ───────── Types ───────── */
-
 export interface AttachmentFile {
   id: string;
   type: "character" | "style" | "scene" | "text";
@@ -36,38 +34,36 @@ interface ComposerProps {
   showModal: boolean;
 }
 
-/* ───────── Constants ───────── */
-
 const INSPIRATIONS = [
-  "一只总把袜子穿反的小恐龙，第一天去恐龙幼儿园",
-  "云朵工厂里的失败品——一朵会下糖果的云",
-  "城市夜晚，街灯们偷偷换班去看月亮",
-  "一只想学游泳的乌龟，向章鱼老师拜师",
-  "图书馆深夜，故事书里的角色互相串门",
-  "一个不喜欢光的萤火虫，只爱发明黑色的灯",
-  "外婆的老花镜里住着一个小裁缝",
-  "数字 7 觉得自己太孤单，去找其它数字交朋友",
-  "一只会做梦的茶壶，每天早上把梦倒给它的主人喝",
-  "森林邮局的新邮差是一片落叶",
+  "A little dinosaur who always wears socks on the wrong feet, starting their first day at dino preschool",
+  "The failed products from the cloud factory — a cloud that rains candy instead of rain",
+  "At night in the city, the street lamps secretly switch shifts to go watch the moon together",
+  "A turtle who wants to learn to swim, seeking out an octopus as their master",
+  "Late at night in the library, characters from different storybooks visit each other",
+  "A firefly who doesn't like light, only inventing black lights",
+  "A tiny tailor lives inside grandma's reading glasses",
+  "Number 7 feels too lonely and goes to make friends with other numbers",
+  "A teapot that dreams, pouring its dreams into its owner's morning cup",
+  "The new mail carrier of the forest is a falling leaf",
 ];
 
 const ATTACH_META: Record<
   string,
   { icon: string; label: string; sub: string; accept?: string }
 > = {
-  character: { icon: "👤", label: "角色参考", sub: "让主角长得像 TA", accept: "image/*" },
-  style: { icon: "🎨", label: "画风参考", sub: "指定一种插画风格", accept: "image/*" },
-  scene: { icon: "🏞", label: "场景参考", sub: "特定的环境或地点", accept: "image/*" },
-  text: { icon: "📄", label: "故事文本", sub: "已有的大纲或童谣", accept: ".txt,.md,.docx" },
+  character: { icon: "👤", label: "Character Reference", sub: "Make the main character look like this", accept: "image/*" },
+  style: { icon: "🎨", label: "Style Reference", sub: "Specify an illustration style", accept: "image/*" },
+  scene: { icon: "🏞", label: "Scene Reference", sub: "A specific environment or location", accept: "image/*" },
+  text: { icon: "📄", label: "Story Text", sub: "Existing outline or nursery rhyme", accept: ".txt,.md,.docx" },
 };
 
 const STYLE_CARDS = [
-  { key: "watercolor", label: "水彩", bg: "linear-gradient(135deg, #fcd34d 0%, #f87171 50%, #c084fc 100%)" },
+  { key: "watercolor", label: "Watercolor", bg: "linear-gradient(135deg, #fcd34d 0%, #f87171 50%, #c084fc 100%)" },
   { key: "3d", label: "3D", bg: "linear-gradient(135deg, #60a5fa 0%, #34d399 50%, #fbbf24 100%)" },
-  { key: "ink", label: "水墨", bg: "linear-gradient(135deg, #1f2937 0%, #6b7280 50%, #f3f4f6 100%)" },
+  { key: "ink", label: "Ink", bg: "linear-gradient(135deg, #1f2937 0%, #6b7280 50%, #f3f4f6 100%)" },
   {
     key: "pixel",
-    label: "像素",
+    label: "Pixel",
     bg: "linear-gradient(45deg, #f472b6 25%, #818cf8 25%, #818cf8 50%, #f472b6 50%, #f472b6 75%, #818cf8 75%)",
     bgSize: "12px 12px",
   },
@@ -75,32 +71,32 @@ const STYLE_CARDS = [
 
 const COVER_EXAMPLES = [
   {
-    title: "月光下的小兔",
-    prompt: "一只小兔子坐着萤火虫做的飞船去月球，给妈妈摘一颗星星当礼物",
+    title: "Moonlight Bunny",
+    prompt: "A little bunny riding a spaceship made of fireflies to the moon, picking a star as a gift for mom",
     icon: "🐰",
     g1: "#1e3a8a",
     g2: "#7c3aed",
     g3: "#f9a8d4",
   },
   {
-    title: "勇敢的菜菜",
-    prompt: "森林里所有动物都怕黑，只有小猫菜菜想去找到夜晚的源头",
+    title: "Brave Caicai",
+    prompt: "All forest animals are afraid of the dark, only kitten Caicai wants to find the source of the night",
     icon: "🐱",
     g1: "#064e3b",
     g2: "#10b981",
     g3: "#fde68a",
   },
   {
-    title: "糖果世界",
-    prompt: "小女孩推开了厨房橱柜的门，里面竟然是一整个糖果做的城市",
+    title: "Candy World",
+    prompt: "A little girl opens the kitchen cabinet door, inside is an entire city made of candy",
     icon: "🍭",
     g1: "#9d174d",
     g2: "#f472b6",
     g3: "#fef3c7",
   },
   {
-    title: "会画画的机器人",
-    prompt: "一个被丢弃的扫地机器人，捡到一支画笔，开始记录它看到的世界",
+    title: "The Drawing Robot",
+    prompt: "An abandoned vacuum robot finds a paintbrush and starts recording the world it sees",
     icon: "🤖",
     g1: "#0c4a6e",
     g2: "#0ea5e9",
@@ -109,14 +105,12 @@ const COVER_EXAMPLES = [
 ];
 
 const GEN_STEPS = [
-  "解析故事概念",
-  "设计角色与画风",
-  "生成每一页画面",
-  "添加文字与动效",
-  "合成配乐",
+  "Parsing story concept",
+  "Designing characters & style",
+  "Generating each page",
+  "Adding text & effects",
+  "Composing music",
 ];
-
-/* ───────── SVG Icons ───────── */
 
 const IconAttach = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-[18px] h-[18px]">
@@ -182,8 +176,6 @@ const ATTACH_ICONS: Record<string, () => ReactNode> = {
   text: DocIcon,
 };
 
-/* ───────── Segmented Control ───────── */
-
 function SegGroup({
   options,
   value,
@@ -213,10 +205,7 @@ function SegGroup({
   );
 }
 
-/* ───────── Cover Card SVG ───────── */
-
 function CoverSVG({ icon, g1, g2, g3, title }: { icon: string; g1: string; g2: string; g3: string; title: string }) {
-  // Use a deterministic ID based on icon to avoid re-render issues with Math.random()
   const id = `cg-${icon}-${title}`;
   return (
     <svg viewBox="0 0 120 160" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice" className="w-full h-full block">
@@ -236,8 +225,6 @@ function CoverSVG({ icon, g1, g2, g3, title }: { icon: string; g1: string; g2: s
   );
 }
 
-/* ───────── Toast ───────── */
-
 function Toast({ message }: { message: string }) {
   if (!message) return null;
   return (
@@ -247,20 +234,16 @@ function Toast({ message }: { message: string }) {
   );
 }
 
-/* ───────── Generation Modal ───────── */
-
 function GenModal({ step }: { step: number }) {
   return (
     <div className="fixed inset-0 bg-[rgba(17,24,39,0.45)] backdrop-blur-[8px] flex items-center justify-center z-[200] modal-backdrop-enter">
       <div className="bg-white rounded-3xl px-12 py-10 max-w-[460px] w-[90%] text-center modal-content-enter">
-        {/* Conic spinner */}
         <div className="w-[60px] h-[60px] rounded-full conic-spinner mx-auto mb-5 relative">
           <div className="absolute inset-[6px] bg-white rounded-full" />
         </div>
-        <h3 className="text-[19px] font-semibold mb-1.5">正在生成你的绘本</h3>
-        <p className="text-[13.5px] text-[#6b7280]">这可能需要 30–60 秒，AI 正在分镜和绘制…</p>
+        <h3 className="text-[19px] font-semibold mb-1.5">Creating your storybook</h3>
+        <p className="text-[13.5px] text-[#6b7280]">This may take 30-60 seconds. AI is storyboarding and drawing...</p>
 
-        {/* Steps */}
         <div className="mt-6 text-left bg-[#fafafa] rounded-xl px-4 py-3.5">
           {GEN_STEPS.map((label, i) => {
             const isDone = i < step;
@@ -295,18 +278,15 @@ function GenModal({ step }: { step: number }) {
   );
 }
 
-/* ───────── Main Composer ───────── */
-
 export default function Composer({ onSubmit, loading, genStep, showModal }: ComposerProps) {
-  /* State */
   const [text, setText] = useState("");
   const [files, setFiles] = useState<AttachmentFile[]>([]);
   const [settings, setSettings] = useState<ComposerSettings>({
     pages: "5",
     style: "watercolor",
-    styleLabel: "水彩",
+    styleLabel: "Watercolor",
     age: "3–6",
-    lang: "中文",
+    lang: "English",
   });
   const [openPopover, setOpenPopover] = useState<"attach" | "settings" | null>(null);
   const [toast, setToast] = useState("");
@@ -315,17 +295,15 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingAttachType = useRef<string | null>(null);
   const lastInspirationIdx = useRef(-1);
+  const fileIdCounter = useRef<number>(0);
 
-  /* Derived */
   const canSend = text.trim().length > 0 || files.length > 0;
 
-  /* Toast helper */
   const showToast = useCallback((msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(""), 2200);
   }, []);
 
-  /* Auto-resize textarea */
   const autoResize = useCallback(() => {
     const ta = textareaRef.current;
     if (!ta) return;
@@ -340,10 +318,8 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
     []
   );
 
-  /* Settings summary */
-  const settingsSummary = `${settings.pages} 页 · ${settings.styleLabel} · ${settings.age} 岁`;
+  const settingsSummary = `${settings.pages} pages · ${settings.styleLabel} · Ages ${settings.age}`;
 
-  /* Handlers */
   const handleTextChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
     setText(e.target.value);
     setTimeout(autoResize, 0);
@@ -361,18 +337,16 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
 
   const handleSend = () => {
     if (!canSend || loading) {
-      if (!canSend) showToast("先输入故事概念，或上传一张参考图");
+      if (!canSend) showToast("Enter a story concept or upload a reference image");
       return;
     }
     onSubmit(text.trim(), settings, files);
   };
 
-  /* Attachment */
   const handleAttachClick = (type: string) => {
     pendingAttachType.current = type;
     const meta = ATTACH_META[type];
     if (meta?.accept) {
-      // For image types, open file picker
       const input = fileInputRef.current;
       if (input) {
         input.accept = meta.accept;
@@ -388,13 +362,12 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
     const type = pendingAttachType.current || "character";
     const meta = ATTACH_META[type];
     const newFile: AttachmentFile = {
-      id: `${type}-${Date.now()}`,
+      id: `${type}-${++fileIdCounter.current}`,
       type: type as AttachmentFile["type"],
       name: file.name,
       icon: meta.icon,
       file,
     };
-    // Generate preview for images
     if (file.type.startsWith("image/")) {
       const reader = new FileReader();
       reader.onload = () => {
@@ -405,8 +378,7 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
     } else {
       setFiles((prev) => [...prev, newFile]);
     }
-    showToast(`已添加${meta.label}`);
-    // Reset input
+    showToast(`${meta.label} added`);
     e.target.value = "";
   };
 
@@ -414,7 +386,6 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
     setFiles((prev) => prev.filter((f) => f.id !== id));
   };
 
-  /* Inspiration */
   const handleInspire = () => {
     let idx: number;
     do {
@@ -424,22 +395,19 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
     setText(INSPIRATIONS[idx]);
     setTimeout(autoResize, 0);
     textareaRef.current?.focus();
-    showToast("✨ 灵感来了！不喜欢可以再点一次");
+    showToast("Got an idea! Click again for another");
   };
 
-  /* Cover click */
   const handleCoverClick = (prompt: string) => {
     setText(prompt);
     setTimeout(autoResize, 0);
     textareaRef.current?.focus();
-    showToast("已填入故事概念，按 ⌘+Enter 发送");
+    showToast("Story concept loaded — press ⌘+Enter to send");
   };
 
-  /* Global click-outside & Esc */
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      // If click is outside any popover trigger or popover content, close all
       if (
         !target.closest("[data-popover-trigger]") &&
         !target.closest("[data-popover-content]")
@@ -460,19 +428,14 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
 
   return (
     <>
-      {/* Hidden file input */}
       <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileChange} />
 
-      {/* Toast */}
       <Toast message={toast} />
 
-      {/* Generation Modal */}
       {showModal && <GenModal step={genStep} />}
 
-      {/* ─── Composer Container ─── */}
       <div className="mt-10 relative">
         <div className="composer-container bg-white border border-[#e5e7eb] rounded-3xl shadow-[0_4px_24px_rgba(168,85,247,0.07)] transition-[border-color,box-shadow] duration-200">
-          {/* Attachment chips */}
           {files.length > 0 && (
             <div className="flex flex-wrap gap-2 px-4 pt-3.5">
               {files.map((f) => (
@@ -492,7 +455,7 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
                   <button
                     onClick={() => removeFile(f.id)}
                     className="bg-transparent border-none cursor-pointer text-[#6b21a8] opacity-40 hover:opacity-100 px-1 text-base leading-none"
-                    aria-label="移除"
+                    aria-label="Remove"
                   >
                     ×
                   </button>
@@ -501,22 +464,18 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
             </div>
           )}
 
-          {/* Textarea */}
           <textarea
             ref={textareaRef}
             value={text}
             onChange={handleTextChange}
             onKeyDown={handleKeyDown}
-            placeholder="给我讲一个故事…例如：「小兔子去月球上找妈妈」"
+            placeholder="Tell me a story... e.g., A little bunny goes to the moon to find mom"
             rows={2}
             className="composer-textarea w-full border-none outline-none resize-none px-5 pt-4 pb-2 text-base leading-[1.5] bg-transparent text-[#111827] min-h-[88px] max-h-[240px] placeholder:text-[#9ca3af]"
           />
 
-          {/* Toolbar */}
           <div className="flex items-center justify-between px-2.5 pb-2.5 gap-2">
-            {/* Left tools */}
             <div className="flex items-center gap-0.5">
-              {/* Attach */}
               <div className="relative" data-popover-trigger>
                 <button
                   type="button"
@@ -529,20 +488,19 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
                       ? "bg-[#f3e8ff] text-[#7e22ce]"
                       : "bg-transparent text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[#111827]"
                   }`}
-                  aria-label="添加参考"
-                  title="添加参考"
+                  aria-label="Add reference"
+                  title="Add reference"
                   aria-expanded={openPopover === "attach"}
                   aria-haspopup="true"
                 >
                   <IconAttach />
                 </button>
 
-                {/* Attach popover */}
                 {openPopover === "attach" && (
                   <div
                     data-popover-content
                     role="menu"
-                    aria-label="附件类型"
+                    aria-label="Attachment type"
                     className="absolute bottom-[calc(100%+10px)] left-0 bg-white border border-[#e5e7eb] rounded-[14px] shadow-[0_16px_48px_rgba(0,0,0,0.14)] p-2 min-w-[260px] z-20"
                     onClick={(e) => e.stopPropagation()}
                   >
@@ -569,7 +527,6 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
                 )}
               </div>
 
-              {/* Settings */}
               <div className="relative" data-popover-trigger>
                 <button
                   type="button"
@@ -582,27 +539,25 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
                       ? "bg-[#f3e8ff] text-[#7e22ce]"
                       : "bg-transparent text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[#111827]"
                   }`}
-                  aria-label="设置"
-                  title="设置"
+                  aria-label="Settings"
+                  title="Settings"
                   aria-expanded={openPopover === "settings"}
                   aria-haspopup="true"
                 >
                   <IconSettings />
                 </button>
 
-                {/* Settings popover */}
                 {openPopover === "settings" && (
                   <div
                     data-popover-content
                     role="dialog"
-                    aria-label="生成设置"
+                    aria-label="Generation settings"
                     className="absolute bottom-[calc(100%+10px)] left-0 bg-white border border-[#e5e7eb] rounded-[14px] shadow-[0_16px_48px_rgba(0,0,0,0.14)] p-4 min-w-[340px] z-20"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    {/* Pages */}
                     <div className="mb-4">
                       <div className="text-[11px] font-semibold text-[#6b7280] uppercase tracking-[0.05em] mb-2">
-                        页数
+                        Pages
                       </div>
                       <SegGroup
                         options={["3", "5", "8", "12"]}
@@ -611,10 +566,9 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
                       />
                     </div>
 
-                    {/* Style */}
                     <div className="mb-4">
                       <div className="text-[11px] font-semibold text-[#6b7280] uppercase tracking-[0.05em] mb-2">
-                        画风
+                        Style
                       </div>
                       <div className="grid grid-cols-4 gap-2">
                         {STYLE_CARDS.map((sc) => (
@@ -631,7 +585,7 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
                               background: sc.bg,
                               backgroundSize: sc.bgSize || undefined,
                             }}
-                            aria-label={`选择${sc.label}画风`}
+                            aria-label={`Select ${sc.label} style`}
                             aria-pressed={settings.style === sc.key}
                           >
                             <div className="absolute bottom-1 left-1 right-1 text-[10.5px] text-white bg-[rgba(0,0,0,0.45)] px-1 py-0.5 rounded-[5px] text-center backdrop-blur-[4px] font-medium">
@@ -642,10 +596,9 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
                       </div>
                     </div>
 
-                    {/* Age */}
                     <div className="mb-4">
                       <div className="text-[11px] font-semibold text-[#6b7280] uppercase tracking-[0.05em] mb-2">
-                        受众
+                        Audience Age
                       </div>
                       <SegGroup
                         options={["0–3", "3–6", "6–9", "9+"]}
@@ -654,13 +607,12 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
                       />
                     </div>
 
-                    {/* Language */}
                     <div>
                       <div className="text-[11px] font-semibold text-[#6b7280] uppercase tracking-[0.05em] mb-2">
-                        语言
+                        Language
                       </div>
                       <SegGroup
-                        options={["中文", "English", "日本語"]}
+                        options={["English", "中文", "日本語"]}
                         value={settings.lang}
                         onChange={(v) => setSettings((s) => ({ ...s, lang: v }))}
                       />
@@ -669,7 +621,6 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
                 )}
               </div>
 
-              {/* Inspiration */}
               <button
                 type="button"
                 onClick={(e) => {
@@ -678,13 +629,12 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
                   handleInspire();
                 }}
                 className="w-[34px] h-[34px] rounded-[9px] border-none bg-transparent text-[#6b7280] cursor-pointer grid place-items-center transition-all duration-150 hover:bg-[#f3f4f6] hover:text-[#111827] active:scale-[0.94]"
-                aria-label="给我一个灵感"
-                title="给我一个灵感"
+                aria-label="Give me inspiration"
+                title="Give me inspiration"
               >
                 <IconBulb />
               </button>
 
-              {/* Settings summary pill */}
               <button
                 type="button"
                 onClick={(e) => {
@@ -697,7 +647,6 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
               </button>
             </div>
 
-            {/* Right: Send button */}
             <div>
               <button
                 type="button"
@@ -708,8 +657,8 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
                     ? "bg-[linear-gradient(135deg,#a855f7,#ec4899)] text-white cursor-pointer shadow-[0_4px_12px_rgba(168,85,247,0.35)] hover:-translate-y-px hover:shadow-[0_6px_16px_rgba(168,85,247,0.45)]"
                     : "bg-[#e5e7eb] text-[#9ca3af] cursor-not-allowed"
                 }`}
-                aria-label="发送"
-                title="发送 (⌘ + Enter)"
+                aria-label="Send"
+                title="Send (⌘ + Enter)"
               >
                 <IconSend />
               </button>
@@ -717,7 +666,6 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
           </div>
         </div>
 
-        {/* Hints */}
         <div className="flex items-center justify-center gap-4 mt-3.5 text-[12px] text-[#9ca3af]">
           <span>
             <kbd className="inline-block px-1.5 py-px bg-[#f3f4f6] border border-[#e5e7eb] rounded-[5px] text-[11px] font-mono text-[#6b7280]">
@@ -727,21 +675,20 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
             <kbd className="inline-block px-1.5 py-px bg-[#f3f4f6] border border-[#e5e7eb] rounded-[5px] text-[11px] font-mono text-[#6b7280]">
               Enter
             </kbd>{" "}
-            发送
+            to send
           </span>
           <span>·</span>
-          <span>支持中英文与图片参考</span>
+          <span>Supports English, Chinese & image references</span>
         </div>
       </div>
 
-      {/* ─── Cover Gallery ─── */}
       <div className="mt-16">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-[13px] text-[#6b7280] font-medium tracking-[0.02em]">
-            看看别人创作的绘本
+            Storybooks created by others
           </h3>
           <button className="bg-transparent border-none text-[#a855f7] text-[13px] cursor-pointer font-medium font-[inherit] hover:text-[#ec4899]">
-            查看完整画廊 →
+            View full gallery →
           </button>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
