@@ -1,6 +1,9 @@
 const RUNWAY_API = "https://api.dev.runwayml.com";
 const RUNWAY_VERSION = "2024-11-06";
 
+const VALID_VIDEO_MODELS = ["gen4.5", "gen4_turbo", "veo3.1", "gen3a_turbo", "veo3.1_fast", "veo3"] as const;
+type VideoModel = typeof VALID_VIDEO_MODELS[number];
+
 function getHeaders(): Record<string, string> {
   const key = process.env.RUNWAY_API_KEY;
   if (!key) {
@@ -16,17 +19,16 @@ function getHeaders(): Record<string, string> {
 export interface TaskResult {
   id: string;
   status: "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "THROTTLED";
-  output?: string[];
+  output?: string[] | { video?: string };
   failureReason?: string;
   createdAt?: string;
 }
 
-/**
- * Generate an image from text using Runway text_to_image API
- */
 export async function generateImage(
   sceneDescription: string,
-  styleHint: string = "children's picture book illustration, watercolor, soft colors, warm lighting"
+  styleHint: string = "children's picture book illustration, watercolor, soft colors, warm lighting",
+  ratio: string = "1280:720",
+  model: string = "gen4_image"
 ): Promise<{ taskId: string }> {
   if (!sceneDescription || typeof sceneDescription !== "string") {
     throw new Error("sceneDescription must be a non-empty string");
@@ -39,22 +41,22 @@ export async function generateImage(
     headers: getHeaders(),
     body: JSON.stringify({
       promptText: prompt.substring(0, 1000),
-      model: "gen4_image",
-      ratio: "1280:720",
+      model: model,
+      ratio: ratio,
     }),
   });
 
   if (!res.ok) {
     let errorDetail = "";
     let errorCode = "";
-    try { 
+    try {
       const errorJson = await res.json();
       errorDetail = JSON.stringify(errorJson);
       errorCode = errorJson?.code || errorJson?.error?.code || "";
     } catch {
-      try { errorDetail = await res.text(); } catch {}
+      try { errorDetail = await res.text(); } catch { }
     }
-    console.error("Runway API error:", res.status, res.statusText, errorCode, errorDetail);
+    console.error("Runway image API error:", res.status, res.statusText, errorCode, errorDetail);
     throw new Error(`Runway API error (${res.status}${errorCode ? `, code: ${errorCode}` : ""}): ${errorDetail}`);
   }
 
@@ -65,14 +67,12 @@ export async function generateImage(
   return { taskId: data.id };
 }
 
-/**
- * Generate a video from an image using Runway image_to_video API
- */
 export async function generateVideo(
   imageUrl: string,
-  prompt: string
+  prompt: string,
+  ratio: string = "1280:768",
+  model: VideoModel = "gen4.5"
 ): Promise<{ taskId: string }> {
-  // SSRF protection: validate URL
   if (!imageUrl || typeof imageUrl !== "string") {
     throw new Error("imageUrl must be a non-empty string");
   }
@@ -81,7 +81,6 @@ export async function generateVideo(
     if (url.protocol !== "https:" && url.protocol !== "data:") {
       throw new Error("imageUrl must use HTTPS");
     }
-    // Block private/internal IPs
     const hostname = url.hostname;
     if (
       hostname === "localhost" ||
@@ -105,40 +104,44 @@ export async function generateVideo(
     throw new Error("prompt must be a non-empty string");
   }
 
+  if (!VALID_VIDEO_MODELS.includes(model)) {
+    throw new Error(`Invalid video model: ${model}. Valid models are: ${VALID_VIDEO_MODELS.join(", ")}`);
+  }
+
+  console.log("[Runway] Creating video with:", { promptImage: imageUrl, model: model, duration: 8, ratio: ratio, promptText: prompt.substring(0, 100) });
+
   const res = await fetch(`${RUNWAY_API}/v1/image_to_video`, {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({
       promptImage: imageUrl,
-      model: "gen3a_turbo",
-      duration: 5,
-      ratio: "1280:768",
+      model: model,
+      duration: 8,
+      ratio: ratio,
       promptText: prompt.substring(0, 1000),
     }),
   });
 
   if (!res.ok) {
     let errorDetail = "";
-    try { 
+    try {
       const errorJson = await res.json();
       errorDetail = JSON.stringify(errorJson);
     } catch {
-      try { errorDetail = await res.text(); } catch {}
+      try { errorDetail = await res.text(); } catch { }
     }
     console.error("Runway video API error:", res.status, errorDetail);
     throw new Error(`Video generation failed (${res.status}): ${errorDetail}`);
   }
 
   const data = await res.json();
+  console.log("[Runway] Video task created:", data);
   if (!data.id) {
     throw new Error("Video generation returned no task ID");
   }
   return { taskId: data.id };
 }
 
-/**
- * Get task status by ID
- */
 export async function getTaskStatus(taskId: string): Promise<TaskResult> {
   if (!taskId) {
     throw new Error("taskId is required");
@@ -158,10 +161,6 @@ export async function getTaskStatus(taskId: string): Promise<TaskResult> {
   return await res.json();
 }
 
-/**
- * Poll task until it completes (SUCCEEDED or FAILED)
- * Uses exponential backoff for THROTTLED tasks
- */
 export async function waitForTask(
   taskId: string,
   maxWaitMs: number = 300000,
@@ -230,9 +229,6 @@ export async function waitForTask(
   throw new Error(`Generation timed out after ${elapsed}ms (max: ${maxWaitMs}ms). Last: ${lastStatusInfo}`);
 }
 
-/**
- * Generate speech from text using Runway text_to_speech API
- */
 export async function generateSpeech(
   text: string,
   voice: string = "Maya",
@@ -258,12 +254,12 @@ export async function generateSpeech(
   if (!res.ok) {
     let errorDetail = "";
     let errorCode = "";
-    try { 
+    try {
       const errorJson = await res.json();
       errorDetail = JSON.stringify(errorJson);
       errorCode = errorJson?.code || errorJson?.error?.code || "";
     } catch {
-      try { errorDetail = await res.text(); } catch {}
+      try { errorDetail = await res.text(); } catch { }
     }
     console.error("Runway TTS API error:", res.status, res.statusText, errorCode, errorDetail);
     throw new Error(`TTS generation failed (${res.status}${errorCode ? `, code: ${errorCode}` : ""}): ${errorDetail}`);
@@ -275,3 +271,6 @@ export async function generateSpeech(
   }
   return { taskId: data.id };
 }
+
+export { VALID_VIDEO_MODELS };
+export type { VideoModel };

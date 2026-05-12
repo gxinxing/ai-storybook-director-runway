@@ -37,9 +37,9 @@ export async function POST(req: NextRequest) {
     }
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error("Audio generation error:", errorMessage);
-    return NextResponse.json(
-      { error: `音频生成失败: ${errorMessage}` },
-      { status: 500 }
-    );
+    if (errorMessage.includes("API key") || errorMessage.includes("401") || errorMessage.includes("403")) {
+      return NextResponse.json({ error: "Runway API 密钥未配置或无效。请检查 .env.local 文件中的 RUNWAY_API_KEY" }, { status: 500 });
+    }
+    return NextResponse.json({ error: `音频生成失败: ${errorMessage}` }, { status: 500 });
   }
 }

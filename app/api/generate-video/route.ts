@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateVideo, waitForTask } from "@/lib/runway";
+import { generateVideo, VALID_VIDEO_MODELS, VideoModel } from "@/lib/runway";
+
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
-  const abortController = new AbortController();
-
-  // Cancel on client disconnect
-  req.signal.addEventListener("abort", () => abortController.abort());
-
   try {
-    const { imageUrl, prompt } = await req.json();
+    const { imageUrl, prompt, ratio, model } = await req.json();
+
+    console.log("[Runway] Video generation request:", { imageUrl: imageUrl?.substring(0, 100), prompt: prompt?.substring(0, 50), ratio, model });
 
     if (!imageUrl || typeof imageUrl !== "string") {
       return NextResponse.json(
@@ -24,31 +23,27 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { taskId } = await generateVideo(imageUrl, prompt);
-    const result = await waitForTask(taskId, 600000, abortController.signal, "video");
-
-    if (!result.output || result.output.length === 0) {
-      throw new Error("No output");
+    let videoModel: VideoModel = "gen4.5";
+    if (model && VALID_VIDEO_MODELS.includes(model as VideoModel)) {
+      videoModel = model as VideoModel;
+    } else if (model) {
+      console.warn(`Invalid model ${model}, using default gen4.5. Valid models: ${VALID_VIDEO_MODELS.join(", ")}`);
     }
 
-    return NextResponse.json({ videoUrl: result.output[0] });
+    const { taskId } = await generateVideo(imageUrl, prompt, ratio, videoModel);
+
+    return NextResponse.json({ taskId });
   } catch (error: unknown) {
-    if (error instanceof Error && error.message === "Operation cancelled") {
-      return NextResponse.json({ error: "已取消" }, { status: 499 });
-    }
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("Video generation error:", errorMessage);
-    if (errorMessage.includes("API key") || errorMessage.includes("401")) {
-      return NextResponse.json({ error: "Runway API 密钥未配置或无效" }, { status: 500 });
+    console.error("[Runway] Video generation submission error:", errorMessage);
+    if (errorMessage.includes("API key") || errorMessage.includes("401") || errorMessage.includes("403")) {
+      return NextResponse.json({ error: "Runway API 密钥未配置或无效。请检查 .env.local 文件中的 RUNWAY_API_KEY" }, { status: 500 });
     }
     if (errorMessage.includes("429") || errorMessage.includes("THROTTLED")) {
       return NextResponse.json({ error: "视频生成请求过多，请稍后重试" }, { status: 429 });
     }
-    if (errorMessage.includes("timed out")) {
-      return NextResponse.json({ error: "视频生成超时，请重试" }, { status: 504 });
-    }
     return NextResponse.json(
-      { error: `视频生成失败: ${errorMessage}` },
+      { error: `视频生成任务提交失败: ${errorMessage}` },
       { status: 500 }
     );
   }

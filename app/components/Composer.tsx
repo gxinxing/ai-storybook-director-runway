@@ -25,7 +25,24 @@ export interface ComposerSettings {
   styleLabel: string;
   age: string;
   lang: string;
+  aspectRatio: "16:9" | "9:16";
+  videoModel: string;
 }
+
+interface VideoModelOption {
+  id: string;
+  name: string;
+  description: string;
+}
+
+const VIDEO_MODELS: VideoModelOption[] = [
+  { id: "gen4.5", name: "Gen 4.5", description: "Latest" },
+  { id: "gen4_turbo", name: "Gen 4 Turbo", description: "Fast" },
+  { id: "veo3.1", name: "Veo 3.1", description: "Quality" },
+  { id: "gen3a_turbo", name: "Gen 3A Turbo", description: "Classic" },
+  { id: "veo3.1_fast", name: "Veo 3.1 Fast", description: "Quick" },
+  { id: "veo3", name: "Veo 3", description: "Original" },
+];
 
 interface ComposerProps {
   onSubmit: (concept: string, settings: ComposerSettings, files: AttachmentFile[]) => void;
@@ -73,34 +90,38 @@ const COVER_EXAMPLES = [
   {
     title: "Moonlight Bunny",
     prompt: "A little bunny riding a spaceship made of fireflies to the moon, picking a star as a gift for mom",
-    icon: "🐰",
-    g1: "#1e3a8a",
-    g2: "#7c3aed",
-    g3: "#f9a8d4",
+    icon: "M",
+    g1: "#312e81",
+    g2: "#6d28d9",
+    g3: "#e0e7ff",
+    accent: "#c4b5fd",
   },
   {
     title: "Brave Caicai",
     prompt: "All forest animals are afraid of the dark, only kitten Caicai wants to find the source of the night",
-    icon: "🐱",
-    g1: "#064e3b",
-    g2: "#10b981",
-    g3: "#fde68a",
+    icon: "C",
+    g1: "#78350f",
+    g2: "#ea580c",
+    g3: "#fef3c7",
+    accent: "#fdba74",
   },
   {
     title: "Candy World",
     prompt: "A little girl opens the kitchen cabinet door, inside is an entire city made of candy",
-    icon: "🍭",
-    g1: "#9d174d",
-    g2: "#f472b6",
-    g3: "#fef3c7",
+    icon: "W",
+    g1: "#831843",
+    g2: "#db2777",
+    g3: "#fce7f3",
+    accent: "#f9a8d4",
   },
   {
     title: "The Drawing Robot",
     prompt: "An abandoned vacuum robot finds a paintbrush and starts recording the world it sees",
-    icon: "🤖",
-    g1: "#0c4a6e",
-    g2: "#0ea5e9",
-    g3: "#bae6fd",
+    icon: "R",
+    g1: "#164e63",
+    g2: "#0891b2",
+    g3: "#cffafe",
+    accent: "#67e8f9",
   },
 ];
 
@@ -205,22 +226,111 @@ function SegGroup({
   );
 }
 
-function CoverSVG({ icon, g1, g2, g3, title }: { icon: string; g1: string; g2: string; g3: string; title: string }) {
+function CoverSVG({ icon, g1, g2, g3, title, accent }: { icon: string; g1: string; g2: string; g3: string; title: string; accent?: string }) {
   const id = `cg-${icon}-${title}`;
+  const accentColor = accent || g3;
+  
   return (
     <svg viewBox="0 0 120 160" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice" className="w-full h-full block">
       <defs>
-        <radialGradient id={id} cx="50%" cy="35%" r="85%">
-          <stop offset="0%" stopColor={g3} />
-          <stop offset="55%" stopColor={g2} />
-          <stop offset="100%" stopColor={g1} />
+        <linearGradient id={`${id}-bg`} x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor={g1} />
+          <stop offset="60%" stopColor={g2} />
+          <stop offset="100%" stopColor={g3} />
+        </linearGradient>
+        <radialGradient id={`${id}-glow`} cx="50%" cy="40%" r="60%">
+          <stop offset="0%" stopColor={accentColor} stopOpacity="0.35" />
+          <stop offset="100%" stopColor={accentColor} stopOpacity="0" />
         </radialGradient>
+        <filter id={`${id}-blur`}>
+          <feGaussianBlur in="SourceGraphic" stdDeviation="6" />
+        </filter>
+        <filter id={`${id}-blur-lg`}>
+          <feGaussianBlur in="SourceGraphic" stdDeviation="12" />
+        </filter>
       </defs>
-      <rect width="120" height="160" fill={`url(#${id})`} />
-      <circle cx="90" cy="32" r="13" fill="rgba(255,255,255,0.22)" />
-      <circle cx="25" cy="115" r="8" fill="rgba(255,255,255,0.15)" />
-      <text x="60" y="105" textAnchor="middle" fontSize="42">{icon}</text>
-      <text x="60" y="135" textAnchor="middle" fontSize="10" fill="white" fontWeight="700" fontFamily="-apple-system, sans-serif" letterSpacing="0.5">{title}</text>
+      
+      {/* Background gradient */}
+      <rect width="120" height="160" fill={`url(#${id}-bg)`} />
+      
+      {/* Soft radial glow overlay */}
+      <rect width="120" height="160" fill={`url(#${id}-glow)`} />
+      
+      {/* Large blurred orb - top right */}
+      <circle cx="98" cy="25" r="30" fill={g3} opacity="0.5" filter={`url(#${id}-blur-lg)`} />
+      
+      {/* Medium blurred orb - bottom left */}
+      <circle cx="15" cy="140" r="22" fill="#ffffff" opacity="0.2" filter={`url(#${id}-blur)`} />
+      
+      {/* Tiny star specks for Moonlight Bunny card */}
+      {title === "Moonlight Bunny" && (
+        <>
+          <circle cx="22" cy="18" r="1.2" fill="#ffffff" opacity="0.7" />
+          <circle cx="45" cy="12" r="0.8" fill="#ffffff" opacity="0.5" />
+          <circle cx="78" cy="15" r="1" fill="#ffffff" opacity="0.6" />
+          <circle cx="105" cy="45" r="0.9" fill="#ffffff" opacity="0.4" />
+          <circle cx="12" cy="48" r="0.7" fill="#ffffff" opacity="0.45" />
+        </>
+      )}
+      
+      {/* Subtle geometric accents */}
+      <circle cx="14" cy="16" r="4" fill="#ffffff" opacity="0.15" />
+      <circle cx="106" cy="142" r="6" fill={accentColor} opacity="0.08" filter={`url(#${id}-blur)}`} />
+      
+      {/* Subtle ring decoration */}
+      <circle cx="92" cy="130" r="14" fill="none" stroke="#ffffff" strokeWidth="0.5" opacity="0.1" />
+      
+      {/* Small decorative dot */}
+      <circle cx="24" cy="58" r="2.5" fill="#ffffff" opacity="0.12" />
+      
+      {/* Center circle backdrop for monogram */}
+      <circle cx="60" cy="78" r="28" fill="#000000" opacity="0.06" filter={`url(#${id}-blur)`} />
+      
+      {/* Refined thin-stroke monogram letter */}
+      <text 
+        x="60" 
+        y="90" 
+        textAnchor="middle" 
+        fontSize="38" 
+        fontWeight="300" 
+        fontFamily="-apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Display', sans-serif" 
+        fill="#ffffff" 
+        opacity="0.95"
+        letterSpacing="-1"
+      >
+        {icon}
+      </text>
+      
+      {/* Subtle glow behind the letter */}
+      <text
+        x="60"
+        y="90"
+        textAnchor="middle"
+        fontSize="38"
+        fontWeight="300"
+        fontFamily="-apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Display', sans-serif"
+        fill={accentColor}
+        opacity="0.15"
+        letterSpacing="-1"
+        style={{ filter: "blur(8px)" }}
+      >
+        {icon}
+      </text>
+      
+      {/* Title below monogram */}
+      <text 
+        x="60" 
+        y="122" 
+        textAnchor="middle" 
+        fontSize="8" 
+        fontWeight="500" 
+        fontFamily="-apple-system, BlinkMacSystemFont, 'Inter', sans-serif" 
+        fill="#ffffff" 
+        opacity="0.85"
+        letterSpacing="0.35"
+      >
+        {title}
+      </text>
     </svg>
   );
 }
@@ -282,13 +392,15 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
   const [text, setText] = useState("");
   const [files, setFiles] = useState<AttachmentFile[]>([]);
   const [settings, setSettings] = useState<ComposerSettings>({
-    pages: "5",
+    pages: "12",
     style: "watercolor",
     styleLabel: "Watercolor",
     age: "3–6",
     lang: "English",
+    aspectRatio: "16:9",
+    videoModel: "gen4.5",
   });
-  const [openPopover, setOpenPopover] = useState<"attach" | "settings" | null>(null);
+  const [openPopover, setOpenPopover] = useState<"attach" | "settings" | "frames" | "ratio" | "model" | "style" | "age" | "lang" | null>(null);
   const [toast, setToast] = useState("");
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -312,13 +424,13 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
   }, []);
 
   const togglePopover = useCallback(
-    (name: "attach" | "settings") => {
+    (name: "attach" | "settings" | "frames" | "ratio" | "model" | "style" | "age" | "lang") => {
       setOpenPopover((prev) => (prev === name ? null : name));
     },
     []
   );
 
-  const settingsSummary = `${settings.pages} pages · ${settings.styleLabel} · Ages ${settings.age}`;
+  const settingsSummary = `${settings.pages} frames · ${settings.styleLabel} · ${settings.aspectRatio} · ${settings.videoModel}`;
 
   const handleTextChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
     setText(e.target.value);
@@ -474,7 +586,8 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
             className="composer-textarea w-full border-none outline-none resize-none px-5 pt-4 pb-2 text-base leading-[1.5] bg-transparent text-[#111827] min-h-[88px] max-h-[240px] placeholder:text-[#9ca3af]"
           />
 
-          <div className="flex items-center justify-between px-2.5 pb-2.5 gap-2">
+          {/* Settings Control Bar */}
+          <div className="flex flex-wrap items-center gap-2 px-3 py-2.5 border-t border-[#f3f4f6]">
             <div className="flex items-center gap-0.5">
               <div className="relative" data-popover-trigger>
                 <button
@@ -483,7 +596,7 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
                     e.stopPropagation();
                     togglePopover("attach");
                   }}
-                  className={`w-[34px] h-[34px] rounded-[9px] border-none cursor-pointer grid place-items-center transition-all duration-150 ${
+                  className={`w-[32px] h-[32px] rounded-[8px] border-none cursor-pointer grid place-items-center transition-all duration-150 ${
                     openPopover === "attach"
                       ? "bg-[#f3e8ff] text-[#7e22ce]"
                       : "bg-transparent text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[#111827]"
@@ -501,7 +614,7 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
                     data-popover-content
                     role="menu"
                     aria-label="Attachment type"
-                    className="absolute bottom-[calc(100%+10px)] left-0 bg-white border border-[#e5e7eb] rounded-[14px] shadow-[0_16px_48px_rgba(0,0,0,0.14)] p-2 min-w-[260px] z-20"
+                    className="absolute bottom-[calc(100%+10px)] left-0 bg-white border border-[#e5e7eb] rounded-[14px] shadow-[0_16px_48px_rgba(0,0,0,0.14)] p-2 min-w-[260px] z-30"
                     onClick={(e) => e.stopPropagation()}
                   >
                     {Object.entries(ATTACH_META).map(([type, meta]) => {
@@ -527,100 +640,6 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
                 )}
               </div>
 
-              <div className="relative" data-popover-trigger>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    togglePopover("settings");
-                  }}
-                  className={`w-[34px] h-[34px] rounded-[9px] border-none cursor-pointer grid place-items-center transition-all duration-150 ${
-                    openPopover === "settings"
-                      ? "bg-[#f3e8ff] text-[#7e22ce]"
-                      : "bg-transparent text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[#111827]"
-                  }`}
-                  aria-label="Settings"
-                  title="Settings"
-                  aria-expanded={openPopover === "settings"}
-                  aria-haspopup="true"
-                >
-                  <IconSettings />
-                </button>
-
-                {openPopover === "settings" && (
-                  <div
-                    data-popover-content
-                    role="dialog"
-                    aria-label="Generation settings"
-                    className="absolute bottom-[calc(100%+10px)] left-0 bg-white border border-[#e5e7eb] rounded-[14px] shadow-[0_16px_48px_rgba(0,0,0,0.14)] p-4 min-w-[340px] z-20"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="mb-4">
-                      <div className="text-[11px] font-semibold text-[#6b7280] uppercase tracking-[0.05em] mb-2">
-                        Pages
-                      </div>
-                      <SegGroup
-                        options={["3", "5", "8", "12"]}
-                        value={settings.pages}
-                        onChange={(v) => setSettings((s) => ({ ...s, pages: v }))}
-                      />
-                    </div>
-
-                    <div className="mb-4">
-                      <div className="text-[11px] font-semibold text-[#6b7280] uppercase tracking-[0.05em] mb-2">
-                        Style
-                      </div>
-                      <div className="grid grid-cols-4 gap-2">
-                        {STYLE_CARDS.map((sc) => (
-                          <button
-                            key={sc.key}
-                            type="button"
-                            onClick={() =>
-                              setSettings((s) => ({ ...s, style: sc.key, styleLabel: sc.label }))
-                            }
-                            className={`aspect-square rounded-[9px] border-2 cursor-pointer relative overflow-hidden transition-all hover:scale-[1.04] p-0 ${
-                              settings.style === sc.key ? "border-[#a855f7]" : "border-transparent"
-                            }`}
-                            style={{
-                              background: sc.bg,
-                              backgroundSize: sc.bgSize || undefined,
-                            }}
-                            aria-label={`Select ${sc.label} style`}
-                            aria-pressed={settings.style === sc.key}
-                          >
-                            <div className="absolute bottom-1 left-1 right-1 text-[10.5px] text-white bg-[rgba(0,0,0,0.45)] px-1 py-0.5 rounded-[5px] text-center backdrop-blur-[4px] font-medium">
-                              {sc.label}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="mb-4">
-                      <div className="text-[11px] font-semibold text-[#6b7280] uppercase tracking-[0.05em] mb-2">
-                        Audience Age
-                      </div>
-                      <SegGroup
-                        options={["0–3", "3–6", "6–9", "9+"]}
-                        value={settings.age}
-                        onChange={(v) => setSettings((s) => ({ ...s, age: v }))}
-                      />
-                    </div>
-
-                    <div>
-                      <div className="text-[11px] font-semibold text-[#6b7280] uppercase tracking-[0.05em] mb-2">
-                        Language
-                      </div>
-                      <SegGroup
-                        options={["English", "中文", "日本語"]}
-                        value={settings.lang}
-                        onChange={(v) => setSettings((s) => ({ ...s, lang: v }))}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
               <button
                 type="button"
                 onClick={(e) => {
@@ -628,31 +647,306 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
                   setOpenPopover(null);
                   handleInspire();
                 }}
-                className="w-[34px] h-[34px] rounded-[9px] border-none bg-transparent text-[#6b7280] cursor-pointer grid place-items-center transition-all duration-150 hover:bg-[#f3f4f6] hover:text-[#111827] active:scale-[0.94]"
+                className="w-[32px] h-[32px] rounded-[8px] border-none bg-transparent text-[#6b7280] cursor-pointer grid place-items-center transition-all duration-150 hover:bg-[#f3f4f6] hover:text-[#111827] active:scale-[0.94]"
                 aria-label="Give me inspiration"
                 title="Give me inspiration"
               >
                 <IconBulb />
               </button>
+            </div>
 
+            <div className="h-4 w-px bg-[#e5e7eb]" />
+
+            {/* Frames Chip */}
+            <div className="relative" data-popover-trigger>
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  togglePopover("settings");
+                  togglePopover("frames");
                 }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 ml-1 bg-[#f9fafb] border border-[#e5e7eb] rounded-full text-[12.5px] text-[#6b7280] cursor-pointer transition-all hover:bg-[#f3f4f6] hover:border-[#d1d5db] hover:text-[#111827] font-[inherit] max-sm:hidden"
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer transition-all ${
+                  openPopover === "frames"
+                    ? "bg-[#f3e8ff] text-[#7e22ce] border border-[#c084fc]"
+                    : "bg-[#f9fafb] text-[#6b7280] border border-[#e5e7eb] hover:bg-[#f3f4f6] hover:border-[#d1d5db]"
+                }`}
               >
-                {settingsSummary}
+                {settings.pages} frames
+                <svg className="w-3 h-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
               </button>
+              {openPopover === "frames" && (
+                <div
+                  data-popover-content
+                  role="menu"
+                  aria-label="Frame count"
+                  className="absolute top-full mt-2 left-0 bg-white border border-[#e5e7eb] rounded-xl shadow-lg p-2 z-30 min-w-[140px]"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {["9", "12", "24"].map((opt) => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => {
+                        setSettings((s) => ({ ...s, pages: opt }));
+                        setOpenPopover(null);
+                      }}
+                      className={`w-full px-3 py-1.5 rounded-lg text-left text-sm cursor-pointer transition-colors ${
+                        settings.pages === opt
+                          ? "bg-[#f3e8ff] text-[#7e22ce] font-medium"
+                          : "hover:bg-[#f9fafb] text-[#374151]"
+                      }`}
+                    >
+                      {opt} frames
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
+
+            {/* Aspect Ratio Chip */}
+            <div className="relative" data-popover-trigger>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  togglePopover("ratio");
+                }}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer transition-all ${
+                  openPopover === "ratio"
+                    ? "bg-[#f3e8ff] text-[#7e22ce] border border-[#c084fc]"
+                    : "bg-[#f9fafb] text-[#6b7280] border border-[#e5e7eb] hover:bg-[#f3f4f6] hover:border-[#d1d5db]"
+                }`}
+              >
+                {settings.aspectRatio}
+                <svg className="w-3 h-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+              {openPopover === "ratio" && (
+                <div
+                  data-popover-content
+                  role="menu"
+                  aria-label="Aspect ratio"
+                  className="absolute top-full mt-2 left-0 bg-white border border-[#e5e7eb] rounded-xl shadow-lg p-2 z-30 min-w-[120px]"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {(["16:9", "9:16"] as const).map((opt) => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => {
+                        setSettings((s) => ({ ...s, aspectRatio: opt }));
+                        setOpenPopover(null);
+                      }}
+                      className={`w-full px-3 py-1.5 rounded-lg text-left text-sm cursor-pointer transition-colors ${
+                        settings.aspectRatio === opt
+                          ? "bg-[#f3e8ff] text-[#7e22ce] font-medium"
+                          : "hover:bg-[#f9fafb] text-[#374151]"
+                      }`}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Video Model Chip */}
+            <div className="relative" data-popover-trigger>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  togglePopover("model");
+                }}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer transition-all ${
+                  openPopover === "model"
+                    ? "bg-[#f3e8ff] text-[#7e22ce] border border-[#c084fc]"
+                    : "bg-[#f9fafb] text-[#6b7280] border border-[#e5e7eb] hover:bg-[#f3f4f6] hover:border-[#d1d5db]"
+                }`}
+              >
+                {VIDEO_MODELS.find(m => m.id === settings.videoModel)?.name || settings.videoModel}
+                <svg className="w-3 h-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+              {openPopover === "model" && (
+                <div
+                  data-popover-content
+                  role="menu"
+                  aria-label="Video model"
+                  className="absolute top-full mt-2 left-0 bg-white border border-[#e5e7eb] rounded-xl shadow-lg p-3 z-30 min-w-[280px]"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="grid grid-cols-2 gap-2">
+                    {VIDEO_MODELS.map((model) => (
+                      <button
+                        key={model.id}
+                        type="button"
+                        onClick={() => {
+                          setSettings((s) => ({ ...s, videoModel: model.id }));
+                          setOpenPopover(null);
+                        }}
+                        className={`px-2.5 py-2 rounded-lg border-2 cursor-pointer transition-all text-xs text-left ${
+                          settings.videoModel === model.id
+                            ? "border-[#a855f7] bg-[#f3e8ff] text-[#7e22ce] font-medium"
+                            : "border-[#e5e7eb] bg-white text-[#6b7280] hover:border-[#d1d5db]"
+                        }`}
+                      >
+                        <div className="font-medium">{model.name}</div>
+                        <div className="text-[10px] opacity-70 mt-0.5">{model.description}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Style Chip */}
+            <div className="relative" data-popover-trigger>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  togglePopover("style");
+                }}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer transition-all ${
+                  openPopover === "style"
+                    ? "bg-[#f3e8ff] text-[#7e22ce] border border-[#c084fc]"
+                    : "bg-[#f9fafb] text-[#6b7280] border border-[#e5e7eb] hover:bg-[#f3f4f6] hover:border-[#d1d5db]"
+                }`}
+              >
+                {settings.styleLabel}
+                <svg className="w-3 h-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+              {openPopover === "style" && (
+                <div
+                  data-popover-content
+                  role="menu"
+                  aria-label="Style"
+                  className="absolute top-full mt-2 left-0 bg-white border border-[#e5e7eb] rounded-xl shadow-lg p-3 z-30 min-w-[220px]"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="grid grid-cols-4 gap-2">
+                    {STYLE_CARDS.map((sc) => (
+                      <button
+                        key={sc.key}
+                        type="button"
+                        onClick={() => {
+                          setSettings((s) => ({ ...s, style: sc.key, styleLabel: sc.label }));
+                          setOpenPopover(null);
+                        }}
+                        className={`aspect-square rounded-lg border-2 cursor-pointer relative overflow-hidden transition-all hover:scale-[1.04] p-0 ${
+                          settings.style === sc.key ? "border-[#a855f7]" : "border-transparent"
+                        }`}
+                        style={{ background: sc.bg, backgroundSize: sc.bgSize || undefined }}
+                      >
+                        <div className="absolute bottom-0.5 left-0.5 right-0.5 text-[9px] text-white bg-black/40 px-1 py-0.5 rounded text-center backdrop-blur-sm font-medium">
+                          {sc.label}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Age Chip */}
+            <div className="relative" data-popover-trigger>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  togglePopover("age");
+                }}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer transition-all ${
+                  openPopover === "age"
+                    ? "bg-[#f3e8ff] text-[#7e22ce] border border-[#c084fc]"
+                    : "bg-[#f9fafb] text-[#6b7280] border border-[#e5e7eb] hover:bg-[#f3f4f6] hover:border-[#d1d5db]"
+                }`}
+              >
+                {settings.age}
+                <svg className="w-3 h-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+              {openPopover === "age" && (
+                <div
+                  data-popover-content
+                  role="menu"
+                  aria-label="Age group"
+                  className="absolute top-full mt-2 left-0 bg-white border border-[#e5e7eb] rounded-xl shadow-lg p-2 z-30 min-w-[120px]"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {["0–3", "3–6", "6–9", "9+"].map((opt) => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => {
+                        setSettings((s) => ({ ...s, age: opt }));
+                        setOpenPopover(null);
+                      }}
+                      className={`w-full px-3 py-1.5 rounded-lg text-left text-sm cursor-pointer transition-colors ${
+                        settings.age === opt
+                          ? "bg-[#f3e8ff] text-[#7e22ce] font-medium"
+                          : "hover:bg-[#f9fafb] text-[#374151]"
+                      }`}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Language Chip */}
+            <div className="relative" data-popover-trigger>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  togglePopover("lang");
+                }}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer transition-all ${
+                  openPopover === "lang"
+                    ? "bg-[#f3e8ff] text-[#7e22ce] border border-[#c084fc]"
+                    : "bg-[#f9fafb] text-[#6b7280] border border-[#e5e7eb] hover:bg-[#f3f4f6] hover:border-[#d1d5db]"
+                }`}
+              >
+                {settings.lang}
+                <svg className="w-3 h-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+              {openPopover === "lang" && (
+                <div
+                  data-popover-content
+                  role="menu"
+                  aria-label="Language"
+                  className="absolute top-full mt-2 left-0 bg-white border border-[#e5e7eb] rounded-xl shadow-lg p-2 z-30 min-w-[120px]"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {["English", "中文", "日本語"].map((opt) => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => {
+                        setSettings((s) => ({ ...s, lang: opt }));
+                        setOpenPopover(null);
+                      }}
+                      className={`w-full px-3 py-1.5 rounded-lg text-left text-sm cursor-pointer transition-colors ${
+                        settings.lang === opt
+                          ? "bg-[#f3e8ff] text-[#7e22ce] font-medium"
+                          : "hover:bg-[#f9fafb] text-[#374151]"
+                      }`}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex-1" />
 
             <div>
               <button
                 type="button"
                 onClick={handleSend}
                 disabled={!canSend || loading}
-                className={`w-[34px] h-[34px] rounded-[9px] border-none grid place-items-center transition-all duration-200 ${
+                className={`w-[32px] h-[32px] rounded-[8px] border-none grid place-items-center transition-all duration-200 ${
                   canSend && !loading
                     ? "bg-[linear-gradient(135deg,#a855f7,#ec4899)] text-white cursor-pointer shadow-[0_4px_12px_rgba(168,85,247,0.35)] hover:-translate-y-px hover:shadow-[0_6px_16px_rgba(168,85,247,0.45)]"
                     : "bg-[#e5e7eb] text-[#9ca3af] cursor-not-allowed"
@@ -682,7 +976,7 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
         </div>
       </div>
 
-      <div className="mt-16">
+      <div className="mt-24">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-[13px] text-[#6b7280] font-medium tracking-[0.02em]">
             Storybooks created by others
@@ -698,7 +992,7 @@ export default function Composer({ onSubmit, loading, genStep, showModal }: Comp
               className="cursor-pointer transition-transform duration-200 hover:-translate-y-1"
               onClick={() => handleCoverClick(c.prompt)}
             >
-              <div className="aspect-[3/4] rounded-xl overflow-hidden relative shadow-[0_6px_20px_rgba(0,0,0,0.1)] mb-3">
+              <div className="aspect-[3/4] rounded-xl overflow-hidden relative mb-3 shadow-[0_8px_32px_rgba(0,0,0,0.12)] ring-1 ring-white/10">
                 <CoverSVG icon={c.icon} g1={c.g1} g2={c.g2} g3={c.g3} title={c.title} />
               </div>
               <h4 className="text-sm font-semibold text-[#111827] mb-1">{c.title}</h4>

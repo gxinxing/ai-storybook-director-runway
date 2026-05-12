@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTaskStatus } from "@/lib/runway";
+import { getTaskStatus as getRunwayTaskStatus } from "@/lib/runway";
+import { getTaskStatus as getSeaDanceTaskStatus } from "@/lib/seadance";
 
 export async function GET(req: NextRequest) {
   try {
     const taskId = req.nextUrl.searchParams.get("taskId");
+    const provider = req.nextUrl.searchParams.get("provider") || "runway";
 
     if (!taskId) {
       return NextResponse.json(
@@ -12,7 +14,19 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const task = await getTaskStatus(taskId);
+    console.log(`[Task Status] Querying ${provider} task:`, taskId);
+
+    let task;
+    if (provider === "seadance") {
+      task = await getSeaDanceTaskStatus(taskId);
+      // 适配输出格式以与原有代码兼容
+      if (task.output?.video) {
+        (task as any).output = [task.output.video];
+      }
+    } else {
+      task = await getRunwayTaskStatus(taskId);
+    }
+
     return NextResponse.json(task);
   } catch (error: unknown) {
     console.error("Task status error:", error);

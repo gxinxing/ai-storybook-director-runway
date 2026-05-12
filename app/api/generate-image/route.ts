@@ -1,17 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateImage, waitForTask } from "@/lib/runway";
+import { generateImage } from "@/lib/runway";
 
+// This route now only **starts** the image generation task and immediately returns a task ID.
 export async function POST(req: NextRequest) {
-  const abortController = new AbortController();
-
-  // Cancel on client disconnect
-  req.signal.addEventListener("abort", () => abortController.abort());
-
   try {
     const body = await req.json();
     console.log("Generate image request body:", JSON.stringify(body));
-    
-    const { sceneDescription, styleHint } = body;
+
+    const { sceneDescription, styleHint, ratio } = body;
 
     if (!sceneDescription || typeof sceneDescription !== "string") {
       console.error("Invalid sceneDescription:", sceneDescription);
@@ -28,28 +24,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { taskId } = await generateImage(sceneDescription, styleHint);
-    const result = await waitForTask(taskId, 300000, abortController.signal, "image");
+    // Start the generation task, but do not wait for it to complete.
+    const { taskId } = await generateImage(sceneDescription, styleHint, ratio);
 
-    if (!result.output || result.output.length === 0) {
-      throw new Error("No output");
-    }
-
-    return NextResponse.json({ imageUrl: result.output[0] });
+    // Immediately return the taskId to the client for polling.
+    return NextResponse.json({ taskId });
   } catch (error: unknown) {
-    if (error instanceof Error && error.message === "Operation cancelled") {
-      return NextResponse.json({ error: "已取消" }, { status: 499 });
-    }
+    // This error handling is now only for the initial task submission phase.
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("Image generation error:", errorMessage);
-    if (errorMessage.includes("API key") || errorMessage.includes("401")) {
-      return NextResponse.json({ error: "Runway API 密钥未配置或无效" }, { status: 500 });
+    console.error("Image generation submission error:", errorMessage);
+    if (errorMessage.includes("API key") || errorMessage.includes("401") || errorMessage.includes("403")) {
+      return NextResponse.json({ error: "Runway API 密钥未配置或无效。请检查 .env.local 文件中的 RUNWAY_API_KEY" }, { status: 500 });
     }
     if (errorMessage.includes("429") || errorMessage.includes("THROTTLED")) {
       return NextResponse.json({ error: "图片生成请求过多，请稍后重试" }, { status: 429 });
-    }
-    if (errorMessage.includes("timed out")) {
-      return NextResponse.json({ error: "图片生成超时，请重试" }, { status: 504 });
     }
     return NextResponse.json(
       { error: `图片生成失败: ${errorMessage}` },

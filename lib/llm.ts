@@ -38,28 +38,38 @@ function buildStoryPrompt(
   const ageHint = settings?.age ? ` Target age: ${settings.age} years old.` : "";
   const langHint = settings?.lang ? ` Write narration in ${settings.lang}.` : "";
 
-  return `You are a world-class children's storybook writer and visual director.
+  return `You are a world-class AI Video Prompt Engineer, Story Director, and Intent Classifier.
 
-Given the concept: "${concept}"${attachmentContext}${ageHint}${langHint}
+Given the user's raw concept: "${concept}"${attachmentContext}${ageHint}${langHint}
 
-Create a ${pageCount}-page children's picture book story with these elements:
+Your task is to act as an intelligent agent that transforms this raw, sometimes vague input into a highly structured, emotionally resonant ${pageCount}-page storyboard optimized for AI video generation (Runway Gen-3).
+
+Create the storyboard with these elements:
 - Hook: An attention-grabbing opening
 - Theme: A meaningful underlying message
 - Plot: A clear beginning, middle, and end
 - Twist: An unexpected but delightful turn
 
 For EACH page, provide:
-1. narration: The story text for this page (1-2 sentences, child-friendly)
-2. scene_description: A detailed visual description for AI image generation
-   - MUST include art style: children's picture book illustration,${styleHint} soft colors, warm lighting
-   - Describe characters, setting, action, mood
-   - Keep consistent character descriptions across pages
+1. narration: The story text for this page (1-2 sentences)
+2. scene_description: The enhanced, structured prompt for the AI generation API.
+   - Translate vague ideas into concrete cinematic language.
+   - MUST include: Subject details + Environment + Lighting (e.g., volumetric lighting, soft fill) + Camera Shot (e.g., wide establishing shot, dolly in, close-up) + Color Palette.
+   - Emphasize the art style: ${settings?.style ? settings.style : "children's picture book illustration"}
+   - Keep it comma-separated, professional, and entirely in ENGLISH.
 3. emotion: The emotional tone (e.g., wonder, joy, surprise, courage)
 
-IMPORTANT: Keep character appearance CONSISTENT across all pages.
-IMPORTANT: scene_description must be in ENGLISH for image generation.
-IMPORTANT: narration can be in the same language as the concept.
-IMPORTANT: Return ONLY valid JSON, no markdown, no code blocks.
+CRITICAL: EXTREMELY IMPORTANT - MAINTAIN ABSOLUTE CHARACTER CONSISTENCY ACROSS ALL PAGES!
+
+SPECIAL INSTRUCTIONS FOR CHARACTER CONSISTENCY:
+1. On PAGE 1 ONLY: Define a MAIN CHARACTER with FULL DETAILED DESCRIPTION (name, age, gender, hair color/style, eye color, clothing, accessories, unique features, body type, height, distinctive marks, etc.) in the scene_description.
+2. On ALL SUBSEQUENT PAGES (2+): EXPLICITLY REFERENCE and REUSE the EXACT SAME character description from page 1. DO NOT change any details.
+3. The main character MUST look EXACTLY the same in EVERY single page - same hair, same clothes, same face, same everything.
+4. In scene_description for EVERY page, ALWAYS start with the character description, THEN describe the scene/environment/camera details.
+
+Example Page 1 format: "character: [full detailed character description], [environment, [lighting], [camera shot], [color palette]"
+Example Page 2+ format: "same character as page 1: [brief reminder of key features], [environment change], [lighting], [camera shot], [color palette]"
+"
 
 Return ONLY valid JSON in this exact format:
 {
@@ -122,7 +132,7 @@ function parseStoryResponse(content: string): Story {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     const msg2 = `LLM response parse error: ${msg}`;
-    
+
     try {
       const cleaned = trimmed.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
       if (cleaned !== trimmed) {
@@ -132,7 +142,7 @@ function parseStoryResponse(content: string): Story {
     } catch {
       throw new Error(`${msg2}\nRaw content: ${trimmed.substring(0, 500)}`);
     }
-    
+
     throw new Error(`${msg2}\nRaw content: ${trimmed.substring(0, 500)}`);
   }
 }
@@ -161,7 +171,7 @@ async function callDeepSeek(prompt: string): Promise<Story> {
     const error = await res.text();
     const status = res.status;
     let errorMsg = `DeepSeek API error (${status}): ${error}`;
-    
+
     if (status === 401) {
       errorMsg = `DeepSeek API authentication failed (401): Invalid API key - Please check your .env.local file`;
     } else if (status === 429) {
@@ -169,20 +179,20 @@ async function callDeepSeek(prompt: string): Promise<Story> {
     } else if (status >= 500) {
       errorMsg = `DeepSeek API server error (${status}): ${error}`;
     }
-    
+
     throw new Error(errorMsg);
   }
 
   const data = await res.json();
-  
+
   if (!data.choices || !Array.isArray(data.choices) || data.choices.length === 0) {
     throw new Error(`DeepSeek API returned unexpected format: ${JSON.stringify(data).substring(0, 200)}`);
   }
-  
+
   if (!data.choices[0] || !data.choices[0].message || typeof data.choices[0].message.content !== "string") {
     throw new Error(`DeepSeek API response missing expected fields: ${JSON.stringify(data).substring(0, 200)}`);
   }
-  
+
   const content = data.choices[0].message.content;
   return parseStoryResponse(content);
 }
@@ -211,7 +221,7 @@ async function callOpenAI(prompt: string): Promise<Story> {
     const error = await res.text();
     const status = res.status;
     let errorMsg = `OpenAI API error (${status}): ${error}`;
-    
+
     if (status === 401) {
       errorMsg = `OpenAI API authentication failed (401): Invalid API key - Please check your .env.local file`;
     } else if (status === 429) {
@@ -219,20 +229,20 @@ async function callOpenAI(prompt: string): Promise<Story> {
     } else if (status >= 500) {
       errorMsg = `OpenAI API server error (${status}): ${error}`;
     }
-    
+
     throw new Error(errorMsg);
   }
 
   const data = await res.json();
-  
+
   if (!data.choices || !Array.isArray(data.choices) || data.choices.length === 0) {
     throw new Error(`OpenAI API returned unexpected format: ${JSON.stringify(data).substring(0, 200)}`);
   }
-  
+
   if (!data.choices[0] || !data.choices[0].message || typeof data.choices[0].message.content !== "string") {
     throw new Error(`OpenAI API response missing expected fields: ${JSON.stringify(data).substring(0, 200)}`);
   }
-  
+
   const content = data.choices[0].message.content;
   return parseStoryResponse(content);
 }
@@ -261,7 +271,7 @@ async function callClaude(prompt: string): Promise<Story> {
     const error = await res.text();
     const status = res.status;
     let errorMsg = `Claude API error (${status}): ${error}`;
-    
+
     if (status === 401) {
       errorMsg = `Claude API authentication failed (401): Invalid API key - Please check your .env.local file`;
     } else if (status === 429) {
@@ -269,20 +279,20 @@ async function callClaude(prompt: string): Promise<Story> {
     } else if (status >= 500) {
       errorMsg = `Claude API server error (${status}): ${error}`;
     }
-    
+
     throw new Error(errorMsg);
   }
 
   const data = await res.json();
-  
+
   if (!data.content || !Array.isArray(data.content) || data.content.length === 0) {
     throw new Error(`Claude API returned unexpected format: ${JSON.stringify(data).substring(0, 200)}`);
   }
-  
+
   if (!data.content[0] || !data.content[0].text || typeof data.content[0].text !== "string") {
     throw new Error(`Claude API response missing expected fields: ${JSON.stringify(data).substring(0, 200)}`);
   }
-  
+
   const content = data.content[0].text;
   return parseStoryResponse(content);
 }
@@ -305,4 +315,57 @@ export async function generateStory(
     default:
       return callDeepSeek(prompt);
   }
+}
+
+/**
+ * Refine an existing scene description based on user natural language feedback
+ */
+export async function refineScenePrompt(
+  originalPrompt: string,
+  userInstruction: string
+): Promise<string> {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  if (!apiKey) {
+    throw new Error("DeepSeek API key is not configured.");
+  }
+
+  const systemPrompt = `You are an expert AI Video Prompt Engineer.
+The user wants to modify an existing scene prompt based on their feedback.
+
+Original Prompt: "${originalPrompt}"
+User Feedback: "${userInstruction}"
+
+Task:
+1. Understand the user's intent (e.g., "too dark" means add bright lighting, "make it panning" means add camera pan).
+2. Rewrite the Original Prompt to incorporate these changes.
+3. Keep it as a comma-separated list of visual keywords in ENGLISH.
+4. Do NOT output markdown, conversational text, or explanations.
+
+Return ONLY a JSON object in this exact format:
+{"refined_prompt": "the new complete prompt..."}`;
+
+  const res = await fetch("https://api.deepseek.com/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: "deepseek-chat",
+      messages: [{ role: "user", content: systemPrompt }],
+      temperature: 0.7,
+      response_format: { type: "json_object" },
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to refine prompt: ${await res.text()}`);
+  }
+
+  const data = await res.json();
+  const content = data.choices[0]?.message?.content;
+  if (!content) throw new Error("Invalid response from LLM");
+
+  const parsed = JSON.parse(content);
+  return parsed.refined_prompt || originalPrompt;
 }
