@@ -87,6 +87,7 @@ export default function Home() {
   const [refineInputs, setRefineInputs] = useState<Record<number, string>>({});
   const abortRef = useRef<AbortController | null>(null);
   const settingsRef = useRef<ComposerSettings | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   // Step 1: Generate story (called from Composer)
   const handleComposerSubmit = async (
