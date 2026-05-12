@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     const { taskId } = await generateSpeech(text, voice, model);
     const result = await waitForTask(taskId, 120000, abortController.signal, "audio");
 
-    if (!result.output || result.output.length === 0) {
+    if (!Array.isArray(result.output) || result.output.length === 0) {
       throw new Error("No audio output");
     }
 
